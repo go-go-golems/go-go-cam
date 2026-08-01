@@ -4,7 +4,9 @@ export const SQRT2 = Math.SQRT2;
 export const INF = 1e20;
 
 export const nextFrame = (): Promise<void> =>
-  new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  typeof requestAnimationFrame === "function"
+    ? new Promise((resolve) => requestAnimationFrame(() => resolve()))
+    : new Promise((resolve) => setTimeout(resolve, 0));
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));

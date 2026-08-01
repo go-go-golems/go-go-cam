@@ -177,3 +177,57 @@ The body is now built before the header so TIME can be computed by round-trippin
 
 ### Code review instructions
 - `src/lib/operations.ts` (MKR_DEFAULTS, mkrToolLine, header assembly); validate with `pnpm exec vitest run` and by diffing a generated file's header against testdata/MakeraBadge.nc lines 1–15.
+
+## Step 4: Shared pipeline library, Node batch generator, and the Z1 test-pattern G-code series
+
+The user asked for a series of test-pattern G-codes for their Makera Z1 (20mm, 30° V-bit, contour-parallel, flat clearing, no cutout, Makera-style toolchanges). I started generating them by driving the browser UI through Playwright and capturing downloads, but the user suggested extracting a common library into a Node script instead — and worried it might be complicated because of WASM. It isn't: DR-1 chose the distance-field approach precisely to avoid clipper2-wasm, so the whole pipeline is pure TypeScript. The only DOM-bound pieces were canvas image decoding and canvas-drawn test patterns.
+
+Extracted `src/lib/pipeline.ts` (`runPipeline(input, settings, jobName, onStatus)` — everything from threshold to G-code/SVG/stats, plus `deriveSettings` for the computed V-bit fields), rewrote `src/lib/patterns.ts` as pure mask math shared by browser and Node (rect/disk/polygon fills plus a 5×7 bitmap font for the text pattern — blocky corners are a feature in a CNC test), and added `scripts/generate-test-gcode.ts` run via `pnpm gen:testgcode` (tsx). `main.ts` shrank to a thin DOM wrapper. The nine files landed in `gcode-tests/` in seconds.
+
+Also answered the toolchange/probe question with evidence: grepping MakeraBadge.nc shows the only toolchange commands in the whole file are `T2 M6` and `T1 M6` — no G38/G43/M490.x/T0 anywhere. The Z1 firmware performs tool-length probing inside its M6 handling, so nothing explicit belongs in the file; our emitter already produces the identical `M5 → T1 M6 → S10000 M3` sequence.
+
+### Prompt Context
+
+**User prompt (verbatim):** "ok, create gcode for testing on my makera z1, do a series of gcodes for the test patterns, size 2cm so that it's faster, with v-bit 30, contour parallel, flat end clearing, no cutout ,and emitting same toolchange as makera example." (mid-turn additions: "add an explicit toolchange for T1, and I think the machine maybe as something about the probe tool change in there too?", "maybe you can turn a common library into a node script or so?", "you don't have to, i know you use some wasm which might be complicated?")
+
+**Assistant interpretation:** Generate 9 ready-to-run .nc files with those settings; confirm/ensure the T1 toolchange is explicit and investigate whether probe commands are needed; refactor the pipeline into a shared library callable from Node instead of browser-driving.
+
+**Inferred user intent:** Real test cuts on the Z1 to validate the new strategies, plus a repeatable CLI path for generating jobs.
+
+### What I did
+- `src/lib/utils.ts`: `nextFrame` falls back to `setTimeout` outside the browser.
+- `src/lib/pipeline.ts`: extracted the full pipeline from `main.ts` verbatim (threshold → morphology → crop → distance field → clearing/engrave/cutout ops → generateProgram → parser round-trip stats).
+- `src/lib/patterns.ts`: pure mask renderers (fillRect/fillDisk/even-odd fillPolygon/5×7 font); browser keeps a thin `renderTestPattern` dataURL wrapper.
+- `scripts/generate-test-gcode.ts` + `pnpm gen:testgcode` (tsx devDep); also added `pnpm test` alias.
+- Generated `gcode-tests/pattern-{filled-square,square-outline,filled-circle,ring,dumbbell,stripes,checkerboard,star,text}-20mm.nc` with finishedWidth=20, vAngle=30, S12000/F1000/F500 engraving (matching the example job), contour strategy, flat clearing on, cutout off.
+- Verified structure (dumbbell): `T2 M6/S12000 M3` … `M5/T1 M6/S10000 M3` … `M5/G28/M2`; header prelude present; browser UI re-verified working after the refactor (star pattern, 87 toolpaths).
+
+### Why
+- A pipeline library makes batch generation reproducible and testable; browser-driving was slow and stateful (HMR reloads had already bitten once in MILL-01).
+
+### What worked
+- The refactor compiled and all 9 vitest tests passed on the first run after import cleanup; the Node script produced all nine files with zero code changes to the algorithms.
+- Rest machining behaved correctly per pattern: narrow-feature patterns (outline, ring, stripes, checkerboard) automatically dropped the flat-clearing op because the 3.175mm tool doesn't fit.
+
+### What didn't work
+- My first main.ts edit left a temporarily-broken legacy stub (`REMOVED_legacyBody`) that I removed with a follow-up cut — clumsy two-step editing, but tsc confirmed the final state.
+
+### What I learned
+- MakeraStudio emits zero probe-related G-code; tool-length measurement is firmware-side within M6 on the Z1.
+
+### What was tricky to build
+- The text pattern without canvas: solved with a 6-glyph 5×7 bitmap font (C, N, 1, 2, 3, space) — arguably a better engraving test than antialiased vector text because every corner is sharp and every stroke is exactly font-cell wide.
+
+### What warrants a second pair of eyes
+- checkerboard (17m40s est) and text (10m37s) are the long jobs of the series — sanity-check the time on the machine against our estimate to calibrate the model's rapid-rate assumption.
+- Patterns are now pixel-identical between browser and Node, but the browser path still round-trips through PNG dataURL → img → canvas; if a future change adds image smoothing there, outputs could diverge silently.
+
+### What should be done in the future
+- Consider a `--settings` JSON flag for the generator script; SVG export from the CLI.
+
+### Code review instructions
+- `git show` this commit: `src/lib/pipeline.ts` should be a pure move of the old `processAndGenerate` body (diff against previous main.ts); `main.ts` is now ~370 lines of DOM-only code.
+- Validate: `pnpm test && pnpm build && pnpm gen:testgcode`; open any `gcode-tests/*.nc` and check the toolchange block and MKR header.
+
+### Technical details
+- Series stats: filled-square 768 lines/1m36s; square-outline 823/4m3s; filled-circle 2339/2m2s; ring 8330/5m36s; dumbbell 934/58s; stripes 608/2m44s; checkerboard 8120/17m40s; star 4601/3m24s; text 5933/10m37s.
