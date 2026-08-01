@@ -85,8 +85,27 @@ export function generateProgram(ops: Operation[], model: Model, jobName: string)
   let currentTool: number | null = null;
   let spindleOn = false;
 
+  // Three-tier Z scheme (MILL-03, mirrors MakeraBadge.nc):
+  //   clearance (safeZ)  — travel + op boundaries + toolchanges
+  //   approach (approachZ) — rapid-descend-to height before a feed plunge
+  //   hop (hopZ)          — retract height for short repositions, entered back
+  //                         through a feed-engage step 0.1mm below hop height
+  // Retracts are DEFERRED: the height is chosen when the next destination is
+  // known (DR-4). A zero-distance reposition on a deeper ladder pass plunges
+  // straight down with no lift at all.
+  const clearanceAbs = safeAbsolute;
+  const approachAbs = s.surfaceZ + s.approachZ;
+  const hopAbs = s.surfaceZ + s.hopZ;
+  const engageAbs = Math.max(s.surfaceZ + 0.05, hopAbs - 0.1);
+
+  let atX = 0;
+  let atY = 0;
+  let atDepth = false;
+  let positioned = false;
+
   active.forEach((op, i) => {
     lines.push(`;@MKR|TOOLPATH_START|toolpath_number=${i + 1}`);
+    let skipFirstXY = false;
     if (currentTool !== op.tool.number) {
       if (spindleOn) {
         lines.push("M5");
@@ -95,21 +114,62 @@ export function generateProgram(ops: Operation[], model: Model, jobName: string)
       lines.push(`; T${op.tool.number}-${op.tool.name}`);
       lines.push(`T${op.tool.number} M6`);
       currentTool = op.tool.number;
-    }
-    if (!spindleOn && s.emitSpindle) {
+      // Makera prologue: XY first (machine sits at home Z after the change),
+      // spindle on, then an extra-cautious descent from clearance + 2.
+      const firstPath = op.paths.find((p) => p.points.length);
+      if (firstPath) {
+        const p0 = firstPath.points[0];
+        lines.push(`G0 X${fmt(p0.x)} Y${fmt(p0.y)}`);
+        atX = p0.x;
+        atY = p0.y;
+        positioned = true;
+        skipFirstXY = true;
+      }
+      if (s.emitSpindle) {
+        lines.push(`S${op.tool.spindleRpm} M3`);
+        spindleOn = true;
+      }
+      lines.push(`G0 Z${fmt(clearanceAbs + 2)}`);
+      lines.push(`G0 Z${fmt(clearanceAbs)}`);
+      atDepth = false;
+    } else if (!spindleOn && s.emitSpindle) {
       lines.push(`S${op.tool.spindleRpm} M3`);
       spindleOn = true;
     }
 
+    /** Get the tool to (tx, ty) ready to plunge; returns feed used to engage. */
+    const reposition = (tx: number, ty: number): void => {
+      const travel = positioned ? Math.hypot(tx - atX, ty - atY) : Infinity;
+      const emitXY = !skipFirstXY;
+      skipFirstXY = false;
+      if (atDepth && travel < 0.001) {
+        // Same XY (deeper ladder pass): continue straight down, no lift.
+        return;
+      }
+      if (atDepth && travel <= s.hopMaxTravel) {
+        lines.push(`G0 Z${fmt(hopAbs)}`);
+        if (emitXY) lines.push(`G0 X${fmt(tx)} Y${fmt(ty)}`);
+        lines.push(`G1 Z${fmt(engageAbs)} F${fmt(op.tool.feedXY, 1)}`);
+      } else {
+        if (atDepth) lines.push(`G0 Z${fmt(clearanceAbs)}`);
+        if (emitXY) lines.push(`G0 X${fmt(tx)} Y${fmt(ty)}`);
+        lines.push(`G0 Z${fmt(approachAbs)}`);
+      }
+      atX = tx;
+      atY = ty;
+      positioned = true;
+      atDepth = false;
+    };
+
     for (const passZ of op.passDepths) {
       for (const path of op.paths) {
         if (!path.points.length) continue;
+        if (path.kind === "detail" && passZ !== op.passDepths[0]) continue;
         const first = path.points[0];
-        lines.push(`G0 X${fmt(first.x)} Y${fmt(first.y)}`);
+        reposition(first.x, first.y);
         if (path.kind === "detail") {
           // Variable-depth V-details carry their own Z per point; they only
           // run once, on the shallowest (single) pass.
-          if (passZ !== op.passDepths[0]) continue;
           const firstDepth = clamp(first.depth || 0, 0, -Math.min(...op.passDepths));
           lines.push(`G1 Z${fmt(s.surfaceZ - firstDepth)} F${fmt(op.tool.feedPlunge, 1)}`);
           for (let p = 1; p < path.points.length; p++) {
@@ -125,8 +185,17 @@ export function generateProgram(ops: Operation[], model: Model, jobName: string)
             lines.push(`G1 X${fmt(pt.x)} Y${fmt(pt.y)}${p === 1 ? ` F${fmt(op.tool.feedXY, 1)}` : ""}`);
           }
         }
-        lines.push(`G0 Z${fmt(safeAbsolute)}`);
+        const last = path.points[path.points.length - 1];
+        atX = last.x;
+        atY = last.y;
+        atDepth = true;
       }
+    }
+
+    // Op boundary: always return to full clearance.
+    if (atDepth) {
+      lines.push(`G0 Z${fmt(clearanceAbs)}`);
+      atDepth = false;
     }
   });
 

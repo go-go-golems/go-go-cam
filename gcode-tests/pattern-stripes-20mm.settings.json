@@ -1,0 +1,77 @@
+{
+  "pattern": "stripes",
+  "patternLabel": "Thin stripes (detail test)",
+  "file": "pattern-stripes-20mm.nc",
+  "generatedAt": "2026-08-01T05:57:18.663Z",
+  "generatorCommit": "035ba74",
+  "settings": {
+    "finishedWidth": 20,
+    "maxDimension": 1000,
+    "thresholdMode": "otsu",
+    "manualThreshold": 128,
+    "openRadius": 1,
+    "closeRadius": 1,
+    "minArea": 12,
+    "simplifyTolerance": 0.05,
+    "autoCrop": true,
+    "cropPadding": 8,
+    "invert": false,
+    "vAngle": 30,
+    "capThickness": 0.1,
+    "breakthrough": 0.02,
+    "stepoverFraction": 0.45,
+    "rasterDirection": "horizontal",
+    "originX": 0,
+    "originY": 0,
+    "surfaceZ": 0,
+    "safeZ": 3,
+    "approachZ": 2,
+    "hopZ": 2,
+    "hopMaxTravel": 5,
+    "feedXY": 1000,
+    "feedPlunge": 500,
+    "spindleRpm": 12000,
+    "emitSpindle": true,
+    "mirrorX": false,
+    "mirrorY": false,
+    "pocketStrategy": "contour",
+    "flatClearing": true,
+    "flatDiameter": 3.175,
+    "flatRpm": 10000,
+    "flatFeed": 800,
+    "flatPlunge": 200,
+    "cutoutEnable": false,
+    "cutoutMargin": 2,
+    "stockThickness": 1.3,
+    "cutoutStepdown": 0.5,
+    "cutoutOvercut": 0.2,
+    "targetDepth": 0.12000000000000001,
+    "halfAngle": 0.2617993877991494,
+    "cutWidth": 0.06430780618346946,
+    "toolRadius": 0.03215390309173473
+  },
+  "operations": [
+    {
+      "name": "[T2]Engrave",
+      "tool": {
+        "number": 2,
+        "name": "30deg V-bit (tip cut 0.06mm)",
+        "type": "engraving",
+        "diameter": 3.175,
+        "halfAngle": 15,
+        "spindleRpm": 12000,
+        "feedXY": 1000,
+        "feedPlunge": 500
+      },
+      "paths": 95,
+      "passDepths": [
+        -0.12000000000000001
+      ]
+    }
+  ],
+  "stats": {
+    "lineCount": 433,
+    "cutDistanceMm": 1256,
+    "estimatedMinutes": 1.43
+  }
+}

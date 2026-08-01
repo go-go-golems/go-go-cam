@@ -43,6 +43,12 @@ export interface Settings {
   originY: number;
   surfaceZ: number;
   safeZ: number;
+  /** Rapid-descend-to height above surface before the feed plunge (full cycle). */
+  approachZ: number;
+  /** Retract height for short repositions (hop cycle). */
+  hopZ: number;
+  /** Max XY travel (mm) that still uses the hop cycle instead of full clearance. */
+  hopMaxTravel: number;
   feedXY: number;
   feedPlunge: number;
   spindleRpm: number;

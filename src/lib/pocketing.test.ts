@@ -37,6 +37,9 @@ function testModel(width: number, height: number): Model {
     mirrorY: false,
     surfaceZ: 0,
     safeZ: 3,
+    approachZ: 2,
+    hopZ: 2,
+    hopMaxTravel: 5,
     emitSpindle: true,
     stockThickness: 1.3
   } as Settings;
@@ -217,6 +220,55 @@ describe("generateProgram", () => {
     expect(parsed.metadata.machine).toBe("Makera Z1");
     expect(parsed.metadata.stock).toBe("100 × 100 × 1.3 mm");
     expect(parsed.tools.get(1)?.name).toBe("3.175mm Flat");
+  });
+
+  it("uses hop cycle for short repositions and full cycle for long ones", () => {
+    const model = testModel(32, 32);
+    const near = (ox: number) => ({
+      kind: "raster" as const,
+      depth: 0.12,
+      closed: true,
+      points: [{ x: ox, y: 0 }, { x: ox + 1, y: 0 }, { x: ox + 1, y: 1 }, { x: ox, y: 1 }, { x: ox, y: 0 }]
+    });
+    const gcode = generateProgram(
+      [{ name: "[T2]Engrave", tool: engraver, paths: [near(0), near(3), near(20)], passDepths: [-0.12] }],
+      model, "cycles"
+    );
+    const lines = gcode.split("\n");
+    // square 1 -> square 2: 3mm travel <= 5mm -> hop cycle with feed-engage
+    const hopTravel = lines.indexOf("G0 X3 Y0");
+    expect(hopTravel).toBeGreaterThan(-1);
+    expect(lines[hopTravel - 1]).toBe("G0 Z2");
+    expect(lines[hopTravel + 1]).toBe("G1 Z1.9 F1000");
+    expect(lines[hopTravel + 2]).toBe("G1 Z-0.12 F500");
+    // square 2 -> square 3: 16mm travel -> full cycle: clearance, travel, approach
+    const fullAt = lines.indexOf("G0 X20 Y0");
+    expect(lines[fullAt - 1]).toBe("G0 Z3");
+    expect(lines[fullAt + 1]).toBe("G0 Z2");
+    expect(lines[fullAt + 2]).toBe("G1 Z-0.12 F500");
+  });
+
+  it("emits the Makera toolchange prologue and direct ladder re-plunge", () => {
+    const model = testModel(32, 32);
+    const gcode = generateProgram(
+      [{ name: "[T1]Cutout", tool: flat, paths: [square(1.5)], passDepths: makePassLadder(1.5, 0.5) }],
+      model, "prologue"
+    );
+    const lines = gcode.split("\n");
+    // prologue: T1 M6, XY, S M3, Z5, Z3, then approach + plunge
+    const m6 = lines.indexOf("T1 M6");
+    expect(lines[m6 + 1]).toBe("G0 X0 Y0");
+    expect(lines[m6 + 2]).toBe("S10000 M3");
+    expect(lines[m6 + 3]).toBe("G0 Z5");
+    expect(lines[m6 + 4]).toBe("G0 Z3");
+    expect(lines[m6 + 5]).toBe("G0 Z2");
+    expect(lines[m6 + 6]).toBe("G1 Z-0.5 F150");
+    // closed square: each ladder pass ends where the next begins -> straight
+    // deepening with no lift between passes
+    const secondPlunge = lines.indexOf("G1 Z-1 F150");
+    expect(lines[secondPlunge - 1]).toBe("G1 X0 Y0");
+    const thirdPlunge = lines.indexOf("G1 Z-1.5 F150");
+    expect(lines[thirdPlunge - 1]).toBe("G1 X0 Y0");
   });
 
   it("skips empty operations entirely", () => {

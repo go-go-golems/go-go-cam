@@ -288,5 +288,14 @@ export function deriveSettings(
   const targetDepth = base.capThickness + base.breakthrough;
   const halfAngle = base.vAngle * Math.PI / 360;
   const cutWidth = 2 * targetDepth * Math.tan(halfAngle);
-  return { ...base, targetDepth, halfAngle, cutWidth, toolRadius: cutWidth / 2 };
+  return {
+    ...base,
+    targetDepth,
+    halfAngle,
+    cutWidth,
+    toolRadius: cutWidth / 2,
+    // a hop or approach above travel clearance is meaningless (DR-3)
+    approachZ: Math.min(base.approachZ, base.safeZ),
+    hopZ: Math.min(base.hopZ, base.safeZ)
+  };
 }
