@@ -13,7 +13,7 @@
 - [x] Update ticket changelog with research and design outcome.
 - [x] Validate documentation with `docmgr doctor` and resolve hygiene issues.
 - [x] Bundle-upload the design guide and diary to reMarkable after a dry run, then confirm the uploader success response.
-- [ ] Implement pure square-frame and pass-proportional bridge planner with focused unit tests. <!-- t:qbpn -->
+- [x] Implement pure square-frame and pass-proportional bridge planner with focused unit tests. <!-- t:qbpn -->
 - [ ] Generalize operation emission for pass-specific variable-depth contour routes with regression tests. <!-- t:2nl6 -->
 - [ ] Wire square-frame bridge settings into UI, pipeline, batch defaults, and warnings. <!-- t:cagk -->
 - [ ] Run structural G-code analysis, browser UI inspection, test/build, and update ticket documentation/delivery. <!-- t:3ond -->

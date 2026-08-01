@@ -11,6 +11,10 @@ DocType: reference
 Intent: long-term
 Owners: []
 RelatedFiles:
+    - Path: repo://src/lib/cutout.test.ts
+      Note: Step 8 verification evidence (commit 801096a)
+    - Path: repo://src/lib/cutout.ts
+      Note: Step 8 pure planner implementation (commit 801096a)
     - Path: repo://testdata/MakeraBadge.nc
       Note: Primary evidence inspected chronologically
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/design-doc/01-square-frame-cutout-with-holding-bridges-analysis-design-and-implementation-guide.md
@@ -23,6 +27,7 @@ LastUpdated: 2026-08-01T20:09:00-04:00
 WhatFor: Preserve the research trail and implementation review guidance for MILL-06.
 WhenToUse: Read before continuing ticket research or implementing the proposed cutout.
 ---
+
 
 
 # Diary
@@ -418,3 +423,60 @@ The implementation starts from a clean product baseline: only the uncommitted MI
 - Active goal: `c1792ea8-30e2-449a-b296-f0bd03d4fb7b`.
 - New task IDs: `qbpn`, `2nl6`, `cagk`, `3ond`.
 - Intended LAN serving command after build: `pnpm preview --host 0.0.0.0`.
+
+## Step 8: Implement and test the pure square-frame planner
+
+I implemented the geometry layer independently from the browser and G-code writer. `planSquareFrameCutout` now turns the cleaned foreground bounds into one machine-space square with tool-radius-adjusted margin, then plans one closed path per cut-depth pass. The first pass stays constant-depth; every deeper pass places a retained-depth midpoint on all four sides and proportionally expands its two-ramp bridge span toward the configured final span.
+
+This commit establishes the physical contract without yet changing generated jobs. Isolating it first gives the emitter a tested, typed route plan and makes bridge safety errors explicit instead of silently shortening bridges or producing paths that run into corners.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 7)
+
+**Assistant interpretation:** Implement the feature incrementally with durable diary and commit evidence, starting with the pure planner before integration.
+
+**Inferred user intent:** Ensure the new square/bridge geometry is correct and reviewable independently of UI and machine output details.
+
+**Commit (code):** 801096a79ab07ccadbd6e0dd45197f492242437d — "Feat: plan square cutout bridge passes"
+
+### What I did
+- Added `src/lib/cutout.ts` with `planSquareFrameCutout(model, passDepths)` and a `SquareFrameCutoutPlan` contract.
+- Added `cutoutBridgeThickness` and `cutoutBridgeSpan` to `Settings` in `src/lib/types.ts`, and updated the cutout semantics comment to square frame.
+- Added `src/lib/cutout.test.ts` with tests for non-square artwork, tool-radius clearance, bridge counts/spans, mirrored coordinate transforms, and invalid bridge configurations.
+- Ran `pnpm test -- --run src/lib/cutout.test.ts`; Vitest ran all discovered tests and passed 3 files / 22 tests.
+- Created focused code commit `801096a` after inspecting its staged file list.
+
+### Why
+- The geometry depends only on `Model`, `Settings`, foreground bounds, and canonical pixel/machine conversion. Keeping it pure prevents DOM/G-code concerns from hiding coordinate or bridge-span errors.
+- A final bridge span must be rejected when it would reach a corner; silently reducing a physical retention feature would be an undocumented and dangerous behavior change.
+
+### What worked
+- A 30×10mm artwork at 2mm margin with a 2mm flat tool produces a 36mm square tool-center route: `30 + 2 * (2 + 1)`.
+- 1.3mm stock, 0.8mm retained material, and `[-0.5, -1, -1.5]` produces complete/6.2mm/12.4mm bridge behavior exactly as planned.
+- Each bridged pass has four retained-depth centers at deterministic positions, and mirrored transforms keep the output square around the transformed artwork.
+
+### What didn't work
+- No failure occurred in the focused test run.
+- The command `pnpm test -- --run src/lib/cutout.test.ts` reports all tests because the package script already invokes `vitest run`; this is harmless but less narrow than the argument suggests.
+
+### What I learned
+- Pixel foreground bounds represent occupied cells, not point centers. The planner converts `maxX + 1` and `maxY + 1` so the requested finish margin clears the final pixel edge.
+- Keeping a constant first pass as `Toolpath.depth` and only using per-point depth on bridged routes will let existing constant-contour emission remain simple while making later pass ramps explicit.
+
+### What was tricky to build
+- Image Y is inverted in `pixelToMachine`, and either machine axis can be mirrored. I converted all four artwork-bound corners and reduced them in machine space rather than assuming pixel min/max correspond to machine min/max. This removes a hidden orientation assumption and is covered by the mirror test.
+
+### What warrants a second pair of eyes
+- The current corner-clearance guard uses one flat-tool diameter. This is a conservative named safety constraint, but a machining reviewer should confirm whether a different corner clearance is preferred for the target cutter/material.
+
+### What should be done in the future
+- Integrate `pathsByPass` into the operation writer next, then prove the planner’s per-point depth is emitted as Makera-style XYZ ramps.
+
+### Code review instructions
+- Begin at `src/lib/cutout.ts`; read `machineBoundsForArtwork`, then the pass-span formula in `planSquareFrameCutout`.
+- Run `pnpm test` and inspect `src/lib/cutout.test.ts` for the expected 0/6.2/12.4mm progression.
+
+### Technical details
+- The retained cut depth is `stockThickness - cutoutBridgeThickness`; it is positive below-surface depth, not emitted negative Z.
+- The bridge formula is `finalSpan * (nominalDepth - retainedCutDepth) / (finalDepth - retainedCutDepth)` only for passes deeper than the retained cut depth.

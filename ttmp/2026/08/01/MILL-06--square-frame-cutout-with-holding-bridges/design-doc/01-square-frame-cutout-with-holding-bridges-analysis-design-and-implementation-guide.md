@@ -11,6 +11,10 @@ DocType: design-doc
 Intent: long-term
 Owners: []
 RelatedFiles:
+    - Path: repo://src/lib/cutout.test.ts
+      Note: Geometry, mirroring, span, and guard regression tests (commit 801096a)
+    - Path: repo://src/lib/cutout.ts
+      Note: Pure square frame and bridge-pass geometry implementation (commit 801096a)
     - Path: repo://src/lib/operations.ts
       Note: Depth-ladder and G-code emission contract to generalize
     - Path: repo://src/lib/pipeline.ts
@@ -31,6 +35,7 @@ LastUpdated: 2026-08-01T20:20:00-04:00
 WhatFor: Enable an intern to safely implement and validate a square final cutout with bridge ramps in the ABS Bicolor V-Engraver.
 WhenToUse: Read before changing cutout settings, geometry planning, G-code emission, generated fixtures, or CNC validation.
 ---
+
 
 
 # Square frame cutout with holding bridges: analysis, design, and implementation guide

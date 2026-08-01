@@ -24,3 +24,13 @@ Delivered the reviewed square-frame cutout and holding-bridge guide bundle to re
 - /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/design-doc/01-square-frame-cutout-with-holding-bridges-analysis-design-and-implementation-guide.md — Uploaded implementation guide
 - /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/reference/01-diary.md — Delivery command and confirmation
 
+
+## 2026-08-01
+
+Implemented and tested the pure square-frame planner with four pass-proportional bridge routes (commit 801096a).
+
+### Related Files
+
+- /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/lib/cutout.test.ts — Planner tests
+- /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/lib/cutout.ts — Planner
+
