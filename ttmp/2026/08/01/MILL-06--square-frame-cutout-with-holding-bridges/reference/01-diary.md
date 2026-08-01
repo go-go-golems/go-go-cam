@@ -30,7 +30,9 @@ RelatedFiles:
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/design-doc/01-square-frame-cutout-with-holding-bridges-analysis-design-and-implementation-guide.md
       Note: Detailed evidence-backed design recorded by the diary
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/design-doc/02-cam-settings-information-architecture-previews-and-scoped-presets.md
-      Note: Step 14 design outcome
+      Note: |-
+        Step 14 design outcome
+        Step 15 direct reMarkable delivery source
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-frame-margins.png
       Note: Step 13 browser verification
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-preview.png
@@ -47,6 +49,7 @@ LastUpdated: 2026-08-01T20:09:00-04:00
 WhatFor: Preserve the research trail and implementation review guidance for MILL-06.
 WhenToUse: Read before continuing ticket research or implementing the proposed cutout.
 ---
+
 
 
 
@@ -874,3 +877,54 @@ Output some of the ideas in a new design doc, with ascii screenshot of what thes
 ### Technical details
 - Proposed setting: `flatClearingStepdown: number`, minimum effective 0.05mm, initial default proposal 0.10mm.
 - Proposed scoped preset envelope: `abs-bicolor-v-engraver/cam-preset`, v1, named scope, values, optional note; it is separate from existing image whole-job transfer `abs-bicolor-v-engraver/settings`, v2.
+
+## Step 15: Deliver the CAM settings design directly to reMarkable
+
+The user explicitly requested a direct upload after confirming that the new CAM settings design had not yet been delivered. I uploaded the single design document as a one-document PDF bundle to a dated MILL-06 reMarkable directory; no dry run preceded it because “upload it straight up” explicitly requested the direct path.
+
+This is a documentation delivery only. It does not implement tooltips, the reorganized UI, scoped presets, or multi-pass T1 clearing; those remain proposals in the delivered design.
+
+### Prompt Context
+
+**User prompt (verbatim):** "upload it straight up
+
+[REMINDER] Output a <summary>...</summary> block at the VERY END of your response. This is mandatory."
+
+**Assistant interpretation:** Upload the new CAM settings design immediately rather than perform the usual dry-run-first review path.
+
+**Inferred user intent:** Make the design available on the reMarkable device now for reading/review.
+
+**Commit (code):** N/A — remote documentation delivery only.
+
+### What I did
+- Ran `remarquee upload bundle ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/design-doc/02-cam-settings-information-architecture-previews-and-scoped-presets.md --name "MILL-06 CAM Settings Design" --remote-dir "/ai/2026/08/02/MILL-06" --toc-depth 2 --non-interactive`.
+
+### Why
+- The direct-upload wording explicitly overrides the ticket workflow’s usual dry-run safeguard for this one delivery.
+
+### What worked
+- Remarquee returned: `OK: uploaded MILL-06 CAM Settings Design.pdf -> /ai/2026/08/02/MILL-06`.
+
+### What didn't work
+- No upload failure occurred. A dry run was intentionally skipped at the user’s explicit request.
+
+### What I learned
+- The single document can be delivered as a bundle with a depth-two table of contents, preserving the same ticket-aware naming convention as the prior delivery.
+
+### What was tricky to build
+- The non-default aspect here was process rather than implementation: the normal delivery guardrail requires a dry run, but the user’s direct wording clearly requested bypassing it. I recorded the override and the exact successful command/result.
+
+### What warrants a second pair of eyes
+- The uploader success response confirms cloud delivery, but a reader can review the PDF’s typography/page breaks on-device and request a rendering-focused revision if needed.
+
+### What should be done in the future
+- Review the delivered design and decide the open UX/preset/default-depth questions before implementation.
+
+### Code review instructions
+- Open `MILL-06 CAM Settings Design.pdf` at `/ai/2026/08/02/MILL-06`.
+- Compare it with the editable canonical source in `design-doc/02-cam-settings-information-architecture-previews-and-scoped-presets.md`.
+
+### Technical details
+- Delivered file: `MILL-06 CAM Settings Design.pdf`.
+- Remote directory: `/ai/2026/08/02/MILL-06`.
+- Upload confirmation: `OK: uploaded MILL-06 CAM Settings Design.pdf -> /ai/2026/08/02/MILL-06`.

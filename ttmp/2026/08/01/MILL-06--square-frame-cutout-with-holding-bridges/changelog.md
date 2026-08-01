@@ -93,3 +93,12 @@ Designed task-oriented CAM workspaces, detailed help/explainers, scoped presets,
 
 - /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/design-doc/02-cam-settings-information-architecture-previews-and-scoped-presets.md — New design proposal
 
+
+## 2026-08-01
+
+Directly uploaded CAM settings design PDF to /ai/2026/08/02/MILL-06 at the user's request.
+
+### Related Files
+
+- /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/design-doc/02-cam-settings-information-architecture-previews-and-scoped-presets.md — Delivered CAM settings design
+
