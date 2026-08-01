@@ -117,3 +117,19 @@ Verified in three escalating ways. First numerically: a structural check script 
 
 ### Code review instructions
 - Read `src/lib/fermat.ts` top to bottom against design doc §3 (they follow the same structure); `pnpm test` (18 green), `pnpm exec tsx scripts/check-fermat-structure.ts` for the radius profile; images in ticket `images/` with the narrative in `analysis/01-implementation-writeup-with-visual-progression.md`.
+
+## Step 3: Fermat batch generation and delivery
+
+The user approved generating the comparison batch. Added a strategy CLI argument to the batch generator (`pnpm gen:testgcode [contour|fermat|raster]`, output in `gcode-tests-<strategy>/` for non-default strategies) and generated the full series with `fermat`, then uploaded 21 files to `mimimi-2.local:~/Documents/GCODE/2026-08-01/z1-pattern-tests-fermat/` alongside the contour batch for on-machine comparison.
+
+### Prompt Context
+
+**User prompt (verbatim):** "yes" (approving: regenerate the batch with the fermat strategy and push to mimimi-2 alongside the contour batch)
+
+### What I did / results
+- Script gains argv strategy selection; sidecars record `pocketStrategy: "fermat"` so batches are distinguishable server-side.
+- Estimates vs the contour batch: checkerboard 7m45s → 4m36s (17m40s originally), cat-30mm 10m40s → 6m58s, text 4m13s → 3m5s, star 1m39s → 1m0s, filled-square 1m1s → 52s.
+- Plunge-count proof: checkerboard 513 plunges (contour) → 36 (fermat) = exactly one per cell pocket plus one per finish contour.
+
+### What warrants a second pair of eyes
+- On-machine comparison of the two batches is the real test: surface quality at corridor crossings (fermat) vs ring seams (contour), and wall finish differences.

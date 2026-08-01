@@ -26,6 +26,12 @@ function loadPngRaster(path: string): PipelineInput {
   return { width: png.width, height: png.height, gray };
 }
 
+// Optional CLI arg selects the pocket strategy: pnpm gen:testgcode [contour|fermat|raster]
+const strategyArg = (process.argv[2] ?? "contour") as "raster" | "contour" | "fermat";
+if (!["raster", "contour", "fermat"].includes(strategyArg)) {
+  throw new Error(`Unknown strategy: ${strategyArg}`);
+}
+
 const settings = deriveSettings({
   finishedWidth: 20,
   maxDimension: 1000,
@@ -56,7 +62,7 @@ const settings = deriveSettings({
   emitSpindle: true,
   mirrorX: false,
   mirrorY: false,
-  pocketStrategy: "contour",
+  pocketStrategy: strategyArg,
   flatClearing: true,
   flatDiameter: 3.175,
   flatRpm: 10000,
@@ -69,7 +75,7 @@ const settings = deriveSettings({
   cutoutOvercut: 0.2
 });
 
-const outDir = "gcode-tests";
+const outDir = strategyArg === "contour" ? "gcode-tests" : `gcode-tests-${strategyArg}`;
 mkdirSync(outDir, { recursive: true });
 
 const commit = execSync("git rev-parse --short HEAD").toString().trim();
