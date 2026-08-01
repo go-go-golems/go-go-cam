@@ -54,14 +54,18 @@ function connectorInsidePocket(
   return true;
 }
 
-export function makeContourPocketPaths(
+/**
+ * Raw (unsimplified) offset rings per level, innermost level last. Applies the
+ * 1px step floor and the nested-level-set area dedupe (MILL-02). Shared by the
+ * contour and fermat strategies so both fill identical lanes.
+ */
+export function collectRings(
   dist: Float32Array,
-  model: Model,
+  width: number,
+  height: number,
   toolRadiusPx: number,
-  stepoverPx: number,
-  depth: number,
-  options: { link?: boolean } = {}
-): Toolpath[] {
+  stepoverPx: number
+): Point[][][] {
   // Sub-pixel steps are meaningless on the pixel grid: consecutive levels
   // quantize to the same contour and the tool re-cuts identical rings
   // (observed as "weird jumps" in the MakeraStudio simulator).
@@ -70,7 +74,7 @@ export function makeContourPocketPaths(
   let previousArea = -1;
   // The 0.5px inset mirrors the centerMask definition in the pipeline.
   for (let level = toolRadiusPx + 0.5; ; level += step) {
-    const { loops, area } = extractIsoContours(dist, model.width, model.height, level);
+    const { loops, area } = extractIsoContours(dist, width, height, level);
     if (!loops.length) break;
     // Level sets are nested, so an unchanged area means an identical
     // contour — skip the duplicate ring.
@@ -78,6 +82,18 @@ export function makeContourPocketPaths(
     previousArea = area;
     if (rings.length > 10000) throw new Error("Contour pocketing exceeded 10,000 rings; check stepover.");
   }
+  return rings;
+}
+
+export function makeContourPocketPaths(
+  dist: Float32Array,
+  model: Model,
+  toolRadiusPx: number,
+  stepoverPx: number,
+  depth: number,
+  options: { link?: boolean } = {}
+): Toolpath[] {
+  const rings = collectRings(dist, model.width, model.height, toolRadiusPx, stepoverPx);
 
   const tolerancePx = model.settings.simplifyTolerance / model.mmPerPx;
   const paths: Toolpath[] = [];

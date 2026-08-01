@@ -18,12 +18,14 @@ import {
   zhangSuenThin
 } from "./imaging";
 import {
+  machineToPixel,
   makeContourPaths,
   makeDetailPaths,
   makeRasterPaths,
   pixelToMachine,
   sortPathsNearest
 } from "./toolpath";
+import { makeFermatPocketPaths } from "./fermat";
 import { simplifyClosedLoop, traceBoundaryLoops } from "./geometry";
 import { makeContourPocketPaths } from "./pocketing";
 import { generateProgram, makePassLadder, type Operation, type ToolSpec } from "./operations";
@@ -188,6 +190,9 @@ export async function runPipeline(
   let pocketPaths: Toolpath[];
   if (settings.pocketStrategy === "contour") {
     pocketPaths = makeContourPocketPaths(engraveDist, model, toolRadiusPx, stepPx, settings.targetDepth);
+  } else if (settings.pocketStrategy === "fermat") {
+    const hint = machineToPixel(settings.originX, settings.originY, model);
+    pocketPaths = makeFermatPocketPaths(engraveDist, model, toolRadiusPx, stepPx, settings.targetDepth, hint);
   } else {
     pocketPaths = makeRasterPaths(centerMask, model).paths;
   }

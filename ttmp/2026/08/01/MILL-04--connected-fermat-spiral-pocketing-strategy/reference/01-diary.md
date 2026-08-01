@@ -10,13 +10,20 @@ Topics:
 DocType: reference
 Intent: long-term
 Owners: []
-RelatedFiles: []
+RelatedFiles:
+    - Path: repo://scripts/check-fermat-structure.ts
+      Note: Radius-profile verification
+    - Path: repo://src/lib/fermat.test.ts
+      Note: Structural unit tests
+    - Path: repo://src/lib/fermat.ts
+      Note: The strategy implementation
 ExternalSources: []
-Summary: "Diary for the connected Fermat spiral pocketing implementation."
+Summary: Diary for the connected Fermat spiral pocketing implementation.
 LastUpdated: 2026-08-01T02:11:34.6337786-04:00
 WhatFor: ""
 WhenToUse: ""
 ---
+
 
 # Diary
 
@@ -64,3 +71,49 @@ Designed a discrete "arc/gap/corridor" construction (design doc §3.2): anchors 
 
 ### Code review instructions
 - Read design doc §3 against the paper's §3–4 and Fig. 5; check the parity/coverage argument.
+
+## Step 2: Implementation and visual verification
+
+Implemented the full strategy in `src/lib/fermat.ts` (~230 lines) against the design: ring collection refactored into a shared `collectRings`; loop forest by nearest-previous-level parenting; chain decomposition; the arc/gap/corridor Fermat construction; recursive child splicing; and a proximity merge that unifies same-region root chains (the annulus case). Wired as `pocketStrategy: "fermat"` through types, UI select, and pipeline (start hint = machine origin mapped to pixels).
+
+Verified in three escalating ways. First numerically: a structural check script (`scripts/check-fermat-structure.ts`) computes the radius profile of the disk path — descends 77→2 over 53% of arc length, single minimum at the center turn, ascends to 75, endpoints 6.7px apart. Second by unit tests: 5 new vitest cases (single open path with adjacent boundary endpoints; coverage length within ±15% of contour strategy; annulus merged to one path; dumbbell spliced across lobes; tool-center containment) — 18 total green. Third visually: viewer screenshots per pattern saved to the ticket's `images/` and narrated in the writeup doc.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Execute implementation steps A–D with tests and screenshots at each stage.
+
+**Inferred user intent:** A working, visually verified fermat strategy.
+
+### What I did
+- `collectRings` refactor in pocketing.ts; `fermat.ts` with buildLoopForest / decomposeChain / fermatChainPath / splice / makeFermatPocketPaths; strategy wiring in types/main/index.html/pipeline; 5 tests; structural check script; 6 screenshots.
+
+### Why
+- Verified numerically *before* trusting pictures: the first screenshots (real engraving parameters, 240 lanes in a 500px render) were pure moiré and momentarily looked like a lane-weaving bug; the radius profile settled it, and legibility screenshots were re-shot with deliberately fat lanes (90° V, 0.5mm cap, 90% stepover).
+
+### What worked
+- All five test cases passed on the second run; the dumbbell splice and annulus merge worked without iteration.
+
+### What didn't work
+- First test run: 1 failure in the tool-center containment test — ring vertices live on the vertex grid between pixels, so rounding a boundary vertex can land one pixel outside the level set. Fixed the test tolerance (−1.5px), not the geometry.
+- tsc: unused `step` variable left behind by the collectRings refactor; and an initially-referenced `machineToPixelStart` helper that didn't exist (replaced with `machineToPixel` from toolpath.ts).
+- First design-doc heredoc failed silently due to persisted shell cwd (recorded in Step 1).
+
+### What I learned
+- The chamfer 3-4 metric's ~6% anisotropy, invisible at engraving lane spacing, renders as clearly octagonal lanes at ~1mm spacing (fermat-03 image). Cosmetically fine for engraving; exact EDT (Felzenszwalb) is the upgrade path if wall quality demands it.
+- Verifying continuous-path algorithms by radius profile is far more decisive than any static rendering.
+
+### What was tricky to build
+- The parity/coverage argument had to survive contact with hole boundaries: containment parenting breaks on annular pockets because inner-boundary loops are "contained" by the wrong predecessors; nearest-loop parenting (DR-1 adjustment made during design) handles both families correctly, confirmed by the annulus test.
+- Endpoint preservation through simplification: the final open path is simplified with `simplifyRdp` (which pins endpoints) *after* assembly; simplifying per-ring before assembly would have destroyed anchor alignment.
+
+### What warrants a second pair of eyes
+- `loopDistance` subsampling (≤200 samples/loop) could theoretically mis-parent a loop in pathological geometry; fine for our masks, but worth revisiting if a future shape produces a visibly wrong corridor.
+- The star's 30 detail paths are unchanged behavior (tips too narrow for lanes), but a reviewer should confirm the fermat body and detail tips overlap enough at their seam.
+
+### What should be done in the future
+- Machine test cut with fermat strategy; consider fermat for flat clearing; fairing pass (DR-2) if walls show staircase; exact EDT.
+
+### Code review instructions
+- Read `src/lib/fermat.ts` top to bottom against design doc §3 (they follow the same structure); `pnpm test` (18 green), `pnpm exec tsx scripts/check-fermat-structure.ts` for the radius profile; images in ticket `images/` with the narrative in `analysis/01-implementation-writeup-with-visual-progression.md`.

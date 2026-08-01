@@ -56,7 +56,7 @@ export interface Settings {
   mirrorX: boolean;
   mirrorY: boolean;
   /** Pocket clearing strategy for the engraving operation. */
-  pocketStrategy: "raster" | "contour";
+  pocketStrategy: "raster" | "contour" | "fermat";
   /** Clear wide areas with a flat end mill (T1) before engraving. */
   flatClearing: boolean;
   flatDiameter: number;

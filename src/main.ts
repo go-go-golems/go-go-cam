@@ -153,7 +153,9 @@ function readSettings(): Settings {
     emitSpindle: checked("emitSpindle"),
     mirrorX: checked("mirrorX"),
     mirrorY: checked("mirrorY"),
-    pocketStrategy: $<HTMLSelectElement>("pocketStrategy").value === "contour" ? "contour" : "raster",
+    pocketStrategy: (["contour", "fermat"].includes($<HTMLSelectElement>("pocketStrategy").value)
+      ? $<HTMLSelectElement>("pocketStrategy").value
+      : "raster") as Settings["pocketStrategy"],
     flatClearing: checked("flatClearing"),
     flatDiameter: clamp(numberValue("flatDiameter", 3.175), 0.1, 25),
     flatRpm: Math.round(clamp(numberValue("flatRpm", 10000), 0, 1e6)),
