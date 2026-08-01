@@ -15,6 +15,12 @@ topics:
       description: Technology research and source gathering
     - slug: toolpath-generation
       description: CAM toolpath strategy algorithms
+    - slug: deployment
+      description: Production release and delivery
+    - slug: gitops
+      description: GitOps desired state and reconciliation
+    - slug: kubernetes
+      description: Kubernetes and k3s runtime
 docTypes:
     - slug: design-doc
       description: Structured rationale and architecture notes
