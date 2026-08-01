@@ -21,12 +21,16 @@ RelatedFiles:
       Note: Step 9 structural verification (commit 24263b0)
     - Path: repo://src/lib/pipeline.ts
       Note: Step 9 pipeline integration (commit 24263b0)
+    - Path: repo://src/main.ts
+      Note: Step 12 transfer, validation, and image restore wiring (commit f74bfca)
     - Path: repo://testdata/MakeraBadge.nc
       Note: Primary evidence inspected chronologically
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/design-doc/01-square-frame-cutout-with-holding-bridges-analysis-design-and-implementation-guide.md
       Note: Detailed evidence-backed design recorded by the diary
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-preview.png
       Note: Step 10 initial browser smoke-test screenshot
+    - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-settings-transfer.png
+      Note: Step 12 rendered UI verification
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-square-frame-generated.png
       Note: Step 10 generated-job browser screenshot
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/scripts/01-analyze-makera-contour-bridges.py
@@ -37,6 +41,7 @@ LastUpdated: 2026-08-01T20:09:00-04:00
 WhatFor: Preserve the research trail and implementation review guidance for MILL-06.
 WhenToUse: Read before continuing ticket research or implementing the proposed cutout.
 ---
+
 
 
 
@@ -666,3 +671,68 @@ The software acceptance evidence is complete: the pure planner, pass-specific wr
 - Updated delivery: `MILL-06 Square Frame Implementation.pdf` → `/ai/2026/08/01/MILL-06`.
 - Final software suite: 4 test files / 25 tests passed; production build passed.
 - Live review URL: `http://192.168.0.39:4173/` (process PID 1617728).
+
+## Step 12: Add portable settings transfer and per-image restoration
+
+I added a versioned JSON settings-transfer format plus local persistence keyed by image content. The UI now has Copy settings and Paste settings controls with a visible textarea fallback, so the workflow remains usable on the LAN’s HTTP URL even when the browser disallows the asynchronous Clipboard API. Every valid control change, copy, paste, and generation saves the current settings; when the same data URL is loaded again, its content-derived localStorage key restores that image’s prior settings.
+
+The implementation deliberately indexes by image data rather than filename. Renaming a file does not lose its preferences, while two different images with the same filename do not share settings. Invalid or stale localStorage data is rejected, removed, and never partially applied to controls.
+
+### Prompt Context
+
+**User prompt (verbatim):** "add a copy settings / paste settings functionality
+
+[REMINDER] Output a <summary>...</summary> block at the VERY END of your response. This is mandatory."
+
+**Follow-up user prompt (verbatim):** "and indexed on image, save settings to localstorage so that reloading the same image will restore previous settings
+
+[REMINDER] Output a <summary>...</summary> block at the VERY END of your response. This is mandatory."
+
+**Assistant interpretation:** Provide safe settings export/import and automatically restore settings associated with the image’s content after that image is loaded again.
+
+**Inferred user intent:** Make it fast to reuse proven milling parameters without accidental cross-image leakage or dependence on a browser’s clipboard permissions.
+
+**Commit (code):** f74bfca19885694aee7dd4d2813a7360bf6dfb6c — "Feat: transfer settings per image"
+
+### What I did
+- Added `src/lib/settings-transfer.ts` for strict, versioned JSON serialize/parse contracts and `src/lib/settings-storage.ts` for deterministic content-derived image keys.
+- Added `src/lib/settings-transfer.test.ts` covering JSON round-trip, malformed/unsupported payload rejection, non-finite-value rejection, and stable/different image keys.
+- Added a Settings transfer fieldset in `index.html` with Copy settings, Paste settings, JSON textarea fallback, and local-per-image explanatory text; styled the textarea in `src/style.css`.
+- Added DOM control snapshot/apply validation, clipboard fallback behavior, immediate change/input persistence, process-time persistence, and image-load restoration in `src/main.ts`.
+- Ran `pnpm test && pnpm build`; final results were 5 test files / 28 tests passed and a successful Vite build.
+- Used the live built LAN site to set width to 123.4, copy settings, change width to 55, paste, reload the same cat image, and verify restored width 123.4 with an image-settings localStorage key.
+
+### Why
+- Clipboard APIs are often unavailable or permission-gated on an HTTP LAN origin. Filling/selecting a visible textarea gives the operator a deterministic manual copy/paste path rather than a silently broken button.
+- Content-keyed persistence fulfills “same image” semantics more accurately than using a mutable filename.
+
+### What worked
+- Browser verification returned `copiedFormat: "abs-bicolor-v-engraver/settings"`, `afterPaste: "123.4"`, and exactly one image-settings key.
+- After reload, browser state returned `restoredWidth: "123.4"` and `Image loaded. Restored settings previously saved for this image.`
+- The UI controls render cleanly in the sidebar, with readable buttons, textarea, and persistence description.
+
+### What didn't work
+- The first copy attempt reported `Settings field flatFeed is invalid.` The initial implementation used `input.validity.valid`, but existing number inputs have `min=1`, `step=10`, and defaults such as `flatFeed=800`; browser step validity treats 800 as off-grid from 1 despite the application accepting it. I changed export validation to require only nonempty, finite numeric values; paste validation still enforces declared min/max and supported select values.
+- The first CDP interaction reader returned an empty object/reload width 100 because it navigated an undefined JavaScript result as though it had a `value`; returning a sentinel after `localStorage.clear()` fixed the verification harness, not application behavior.
+
+### What I learned
+- HTML number `step` validity should not be treated as an application settings validity contract when existing control defaults intentionally do not align with the element’s step origin.
+- A JSON envelope plus strict exact control-key validation avoids accidental application of partial or foreign settings payloads.
+
+### What was tricky to build
+- Copy/paste needs both a portable machine-readable format and an HTTP-safe user experience. The solution first fills the textarea, attempts `navigator.clipboard.writeText`, then uses `document.execCommand("copy")`; if both are unavailable it leaves the selected JSON ready for manual copy. Paste uses textarea JSON first and only then tries clipboard read, so it works reliably on the LAN preview.
+
+### What warrants a second pair of eyes
+- The two-lane content fingerprint is an index, not a cryptographic identity. Its collision probability is acceptable for local preferences, but if an installation stores very large image libraries, a future migration could use asynchronous SHA-256 while retaining the versioned key namespace.
+
+### What should be done in the future
+- If settings evolve, add an explicit new transfer version and migration rather than accepting unknown fields or silently changing old payloads.
+
+### Code review instructions
+- Start with `src/lib/settings-transfer.ts` and `src/lib/settings-storage.ts`, then read snapshot/validation/application functions in `src/main.ts`.
+- Verify on the live site: change a value, Copy settings, alter it, Paste settings, reload the cat sample, and confirm the value/status restore.
+
+### Technical details
+- Transfer envelope: `{ format: "abs-bicolor-v-engraver/settings", version: 1, settings: { ... } }`.
+- Storage namespace: `abs-bicolor-v-engraver/image-settings/v1/<content-fingerprint>`.
+- Browser smoke result: 123.4 copied/pasted/restored for the cat-sample data URL; LAN server remained HTTP 200.

@@ -27,6 +27,12 @@ RelatedFiles:
       Note: |-
         Current profile-cutout planning and final operation integration seam
         Square-frame planner integration as final operation (commit 24263b0)
+    - Path: repo://src/lib/settings-storage.ts
+      Note: Image-content localStorage key construction (commit f74bfca)
+    - Path: repo://src/lib/settings-transfer.test.ts
+      Note: Transfer and storage-key contract tests (commit f74bfca)
+    - Path: repo://src/lib/settings-transfer.ts
+      Note: Versioned settings JSON format and strict parser (commit f74bfca)
     - Path: repo://src/lib/toolpath.ts
       Note: Pixel-to-machine transformation required for the square
     - Path: repo://src/lib/types.ts
@@ -39,6 +45,8 @@ RelatedFiles:
       Note: Primary G-code evidence for the four ramped holding bridges
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-preview.png
       Note: Built UI visual smoke-test artifact
+    - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-settings-transfer.png
+      Note: Rendered Settings transfer UI evidence
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-square-frame-generated.png
       Note: Browser-generated square-frame job visual evidence
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/scripts/01-analyze-makera-contour-bridges.py
@@ -49,6 +57,7 @@ LastUpdated: 2026-08-01T20:20:00-04:00
 WhatFor: Enable an intern to safely implement and validate a square final cutout with bridge ramps in the ABS Bicolor V-Engraver.
 WhenToUse: Read before changing cutout settings, geometry planning, G-code emission, generated fixtures, or CNC validation.
 ---
+
 
 
 
@@ -68,7 +77,9 @@ The work is deliberately split into a pure geometry planner, a small operation-e
 
 The documented software change is implemented. `src/lib/cutout.ts` plans the frame and pass-proportional bridges; `src/lib/operations.ts` emits pass-specific pointwise-depth contour routes; `src/lib/pipeline.ts` schedules `[T1]Square Frame Cutout`; and `index.html`/`src/main.ts` expose physical bridge settings and warning text. The code was committed as `801096a` and `24263b0`, with diary commits `07809c8` and `42fa44e`.
 
-Software evidence is green: `pnpm test` passes 4 files / 25 tests, `pnpm build` passes, parser-backed integration tests find the named final toolpath and simultaneous XY/Z bridge ramps, and a built-browser smoke test generated the cat-sample job with the square cutout enabled. The production preview is available on the LAN at `http://192.168.0.39:4173/` while its preview process runs. Physical CNC validation remains required: run a simulator, air cut, and sacrificial-stock cut before using the output on a production workpiece.
+Software evidence is green: `pnpm test` passes 5 files / 28 tests, `pnpm build` passes, parser-backed integration tests find the named final toolpath and simultaneous XY/Z bridge ramps, and a built-browser smoke test generated the cat-sample job with the square cutout enabled. The production preview is available on the LAN at `http://192.168.0.39:4173/` while its preview process runs. Physical CNC validation remains required: run a simulator, air cut, and sacrificial-stock cut before using the output on a production workpiece.
+
+The browser also provides versioned Copy settings/Paste settings JSON, a textarea fallback for HTTP clipboard restrictions, and automatic localStorage persistence keyed by image content. Reopening the same image restores its saved settings; this was implemented in commit `f74bfca` and verified in the built browser by copying/pasting a 123.4mm width, reloading the cat sample, and observing that width restore.
 
 ## 1. Problem statement and scope
 

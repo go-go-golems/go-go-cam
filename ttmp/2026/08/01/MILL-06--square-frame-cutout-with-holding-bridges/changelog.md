@@ -64,3 +64,13 @@ Published the implemented square-frame cutout handoff, with browser/LAN evidence
 - /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-square-frame-generated.png — Rendered generated-job evidence
 - /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/reference/01-diary.md — Implementation delivery and verification evidence
 
+
+## 2026-08-01
+
+Added versioned copy/paste settings and image-content localStorage restoration, with browser verification (commit f74bfca).
+
+### Related Files
+
+- /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/lib/settings-transfer.test.ts — Transfer tests
+- /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/main.ts — Browser transfer and restore behavior
+
