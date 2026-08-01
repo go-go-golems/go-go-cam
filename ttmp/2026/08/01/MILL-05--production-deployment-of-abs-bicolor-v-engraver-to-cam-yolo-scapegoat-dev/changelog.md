@@ -59,3 +59,13 @@ Step 5: Refactored CAM from a bespoke Nginx Deployment to the shared Vite static
 - /home/manuel/code/wesen/2026-03-27--hetzner-k3s/gitops/kustomize/cam/publish-job.yaml — Shared static-sites publisher Job
 - /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/Dockerfile.static — Static /site artifact contract
 
+
+## 2026-08-01
+
+Step 6: Selected public GHCR for CAM and removed runtime image-pull Vault/VSO wiring; retained Vault only for the CI GitHub App credential.
+
+### Related Files
+
+- /home/manuel/code/wesen/2026-03-27--hetzner-k3s/gitops/kustomize/cam/kustomization.yaml — Public artifact publisher package without runtime Vault resources
+- /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/Dockerfile.static — Public Vite artifact contents
+

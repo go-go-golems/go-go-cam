@@ -547,3 +547,93 @@ This is a simplification, not a feature reduction. It removes a dedicated web se
 - Active release link: `/srv/sites/cam.yolo.scapegoat.dev/current`.
 - Shared service: `static-sites-host` on port `80`.
 - Public URL: `https://cam.yolo.scapegoat.dev`.
+
+## Step 6: Remove the unnecessary private-image Vault contract
+
+The deployment was simplified again after comparing CAM with the static-site delivery article and the existing publisher packages. GHCR remains the immutable artifact transport, but CAM's artifact is intentionally public frontend output. A private GHCR pull token would therefore add an operational secret without protecting anything that is not already public.
+
+The GitOps PR credential remains Vault-backed because it grants CI authority to modify the separate k3s repository. That is a different trust boundary from pulling a public static artifact and must not be conflated with the removed image-pull credential.
+
+### Prompt Context
+
+**User prompt (verbatim):** "ok, do it"
+
+**Assistant interpretation:** Make the CAM GHCR package public and refactor the cluster manifests so the publisher no longer requires a Vault-seeded image-pull Secret, while preserving the existing immutable GHCR/GitOps/Argo release path.
+
+**Inferred user intent:** Reduce deployment complexity and avoid minting a registry token for a site whose published files are public.
+
+**Commit (code):** Pending in the source and k3s repositories.
+
+### What I did
+
+- Removed CAM's `VaultAuth`, `VaultConnection`, and `VaultStaticSecret` image-pull resources from the Kustomization.
+- Removed `imagePullSecrets` from the CAM ServiceAccount and publisher Job.
+- Disabled ServiceAccount token automount because the public publisher Job needs no Kubernetes API or Vault identity.
+- Removed the unused CAM Kubernetes Vault policy and role declarations.
+- Kept the `cam-gitops-pr` GitHub Actions policy and role because CI still reads a GitHub App credential to open GitOps PRs.
+- Updated the MILL-05 design guide and index to describe the public GHCR decision and the reduced runtime contract.
+- Attempted to inspect the GitHub package using the authenticated `wesen` CLI account; the package does not exist yet because no source `main` release has published it.
+
+### Why
+
+- A public static artifact does not need a cluster pull credential.
+- The existing shared static-site pipeline still benefits from immutable GHCR tags and reviewed GitOps image pins.
+- Removing VSO resources makes first bootstrap independent of runtime Vault availability.
+
+### What worked
+
+- The local GitHub account is authenticated and has repository/workflow access.
+- The package visibility check correctly reported that `go-go-cam` does not exist yet; it will be created by the first source `main` release.
+- The cluster manifests now contain only the named ServiceAccount, publisher Job, and Ingress for CAM.
+
+### What didn't work
+
+- The package could not be made public before its first image was published: GitHub returned `Package not found` for `ghcr.io/go-go-golems/go-go-cam`.
+- The available CLI token does not advertise package-administration scope, so visibility must be changed after package creation by an organization owner/admin if the API/UI requires it.
+
+### What I learned
+
+- `GITHUB_TOKEN` publishing, GitHub App GitOps authorization, and cluster GHCR pulling are three independent concerns.
+- A package's public/private setting is applied after the first package version exists; removing the pull Secret from Git must therefore be coordinated with the first successful public package verification.
+- Existing static publisher apps use private GHCR plus VSO by default, but that is a policy choice rather than a requirement of the publisher Job.
+
+### What was tricky to build
+
+- The source and cluster contracts had to be changed together: leaving either the ServiceAccount `imagePullSecrets` or the Job's `imagePullSecrets` would retain a dependency on the deleted Secret. Leaving the VSO resources would also make Argo report a false runtime dependency.
+- The GitHub App Vault path must remain because public package visibility does not grant CI permission to write the GitOps repository.
+
+### What warrants a second pair of eyes
+
+- Verify the generated `dist/` contents before the first public image is released; every file in `/site` becomes public.
+- After the first source release creates the package, change package visibility to Public and run an anonymous `docker pull` for the exact SHA tag.
+- Confirm the Argo Job starts successfully without an image-pull Secret before bootstrapping the Application.
+
+### What should be done in the future
+
+- Push the source commit to `main` so GitHub creates `go-go-cam`.
+- Change the package visibility using an organization-authorized GitHub account.
+- Validate anonymous image pull, then merge the resulting GitOps PR.
+- Do not seed `kv/apps/cam/prod/image-pull` unless package policy later requires reverting CAM to private GHCR.
+
+### Code review instructions
+
+- Review the source `Dockerfile.static` and the k3s files under `gitops/kustomize/cam/`.
+- Confirm the GitHub App workflow settings remain unchanged, especially `gitops_pr_token_source: github_app` and `gitops_app_secret_path`.
+- Run:
+
+  ```bash
+  pnpm test
+  pnpm build
+  docker build -f Dockerfile.static -t cam:public-review .
+  docker run --rm --entrypoint sh cam:public-review -c 'find /site -type f | sort'
+  ```
+
+- From the k3s repository, run `kubectl kustomize gitops/kustomize/cam` and `bash scripts/validate_gitops.sh`.
+
+### Technical details
+
+- Public artifact: `ghcr.io/go-go-golems/go-go-cam:sha-<7-char-commit>`.
+- Removed runtime path: `kv/apps/cam/prod/image-pull`.
+- Retained CI path: `kv/ci/github/cam/gitops-pr-app`.
+- Publisher identity: named ServiceAccount `cam`, with token automount disabled.
+- Public package verification: `docker pull ghcr.io/go-go-golems/go-go-cam:sha-<commit>` without credentials.
