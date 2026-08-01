@@ -63,12 +63,17 @@ export interface Settings {
   flatRpm: number;
   flatFeed: number;
   flatPlunge: number;
-  /** Cut the artwork free with a contour around its silhouette (T1). */
+  /** Cut a square frame around the artwork at the end of the job (T1). */
   cutoutEnable: boolean;
+  /** Finished edge clearance from artwork to the square frame (mm). */
   cutoutMargin: number;
   stockThickness: number;
   cutoutStepdown: number;
   cutoutOvercut: number;
+  /** Material intentionally left at each bridge midpoint (mm). */
+  cutoutBridgeThickness: number;
+  /** Total two-ramp span of each bridge on the deepest pass (mm). */
+  cutoutBridgeSpan: number;
 }
 
 export interface Model {
