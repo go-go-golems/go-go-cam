@@ -69,3 +69,13 @@ Step 6: Selected public GHCR for CAM and removed runtime image-pull Vault/VSO wi
 - /home/manuel/code/wesen/2026-03-27--hetzner-k3s/gitops/kustomize/cam/kustomization.yaml — Public artifact publisher package without runtime Vault resources
 - /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/Dockerfile.static — Public Vite artifact contents
 
+
+## 2026-08-01
+
+Step 7: Completed live rollout at cam.yolo.scapegoat.dev using public GHCR image sha-2b00365; Argo is Synced/Healthy, publisher Job completed, certificate is Ready, and HTTPS returns 200.
+
+### Related Files
+
+- /home/manuel/code/wesen/2026-03-27--hetzner-k3s/gitops/applications/cam.yaml — Initial Argo Application bootstrap
+- /home/manuel/code/wesen/2026-03-27--hetzner-k3s/gitops/kustomize/cam/publish-job.yaml — Completed public publisher Job
+

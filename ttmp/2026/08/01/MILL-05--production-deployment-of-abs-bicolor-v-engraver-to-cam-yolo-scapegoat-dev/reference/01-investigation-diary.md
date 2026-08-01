@@ -637,3 +637,104 @@ The GitOps PR credential remains Vault-backed because it grants CI authority to 
 - Retained CI path: `kv/ci/github/cam/gitops-pr-app`.
 - Publisher identity: named ServiceAccount `cam`, with token automount disabled.
 - Public package verification: `docker pull ghcr.io/go-go-golems/go-go-cam:sha-<commit>` without credentials.
+
+## Step 7: Bootstrap and complete the public production rollout
+
+The initial GitOps package was merged manually as PR #285 because the automated image-pinning workflow could not patch a manifest that did not yet exist on `main`. After that bootstrap boundary was crossed, the normal automation resumed: the source workflow published the public GHCR image and created PR #286 through the GitHub App actor.
+
+PR #286 was merged, the Argo Application was applied once, and the publisher completed without any image-pull Secret or CAM Vault resources. The public URL now serves the generated Vite bundle through the shared Caddy host.
+
+### Prompt Context
+
+**User prompt (verbatim):** "continue"
+
+**Assistant interpretation:** Continue the deployment sequence: merge the initial GitOps bootstrap PR, rerun the source release, merge the generated image-pin PR, bootstrap Argo, and verify the live endpoint.
+
+**Inferred user intent:** Finish the deployment rather than stopping after explaining the bootstrap boundary.
+
+**Commit (code):** Source `2b00365` and k3s `6318db1` were already committed; GitOps merge commits are `2d1aa79` (bootstrap) and `2f3f07a` (automated image pin).
+
+### What I did
+
+- Merged initial GitOps bootstrap PR #285.
+- Reran source workflow `30713712468` after the manifest existed on GitOps `main`.
+- Confirmed the workflow published `sha-2b00365` and opened PR #286 as `app/wesen-gitops-pr-bot`.
+- Merged PR #286.
+- Applied `gitops/applications/cam.yaml` and hard-refreshed Argo.
+- Verified the public publisher Job completed:
+  `publish-cam-sha-2b00365`.
+- Verified Argo reported `Synced`, `Healthy`, and `Succeeded`.
+- Verified `cam-tls` is Ready.
+- Verified `https://cam.yolo.scapegoat.dev/` returns HTTP 200 from Caddy.
+- Verified no CAM `VaultAuth`, `VaultConnection`, `VaultStaticSecret`, or `cam-ghcr-pull` Secret exists.
+- Marked deployment and validation tasks complete.
+
+### Why
+
+- The initial package and Application are declarative GitOps state, so they require one reviewed bootstrap PR and one explicit Argo Application creation.
+- Subsequent image changes now use the intended automated source-to-GitOps PR path.
+
+### What worked
+
+- Source workflow publish job: successful.
+- Source workflow Open GitOps PR job: successful after the initial package merge.
+- GitOps validation on PR #286: passed.
+- Publisher Job: `Complete`, `1/1`, approximately five seconds.
+- Argo: `sync=Synced health=Healthy phase=Succeeded`.
+- Public response:
+
+  ```text
+  HTTP/2 200
+  server: Caddy
+  content-type: text/html; charset=utf-8
+  ```
+
+- Publisher file listing contained the expected Vite output under `/site`.
+
+### What didn't work
+
+- The first source workflow attempt failed at `Open GitOps pull requests for published image` because `gitops/kustomize/cam/publish-job.yaml` was absent from GitOps `main`. This was the expected initial-bootstrap failure and was resolved by PR #285.
+- The first rerun reached Vault but failed before the GitHub App credential was seeded and the OIDC policies were applied. The credential was seeded with `scripts/seed-gitops-pr-app-credential.sh --apply cam`, then `bootstrap-vault-github-actions-oidc.sh` and its validator passed.
+
+### What I learned
+
+- The bootstrap sequence has two independent one-time boundaries: a manual GitOps package PR and explicit Argo Application creation.
+- Once the package exists on GitOps `main`, the normal automated PR is created by `app/wesen-gitops-pr-bot`.
+- Public GHCR removes the Kubernetes registry-secret dependency but does not remove Vault-backed CI authorization.
+
+### What was tricky to build
+
+- The public package decision required coordinating package creation, anonymous registry verification, GitHub App Vault seeding, initial GitOps package merge, generated image-pin merge, and Argo bootstrap in the correct order.
+- The source workflow's failure was initially ambiguous until its action log showed `manifest not found`; this was a repository-state bootstrap issue, not a GitHub App or registry failure.
+
+### What warrants a second pair of eyes
+
+- Perform browser-level acceptance at the live URL, including image loading, local processing, G-code generation, and downloads.
+- Confirm the public artifact policy remains acceptable if future builds add source maps or additional assets.
+- Review whether old completed publisher Jobs should be garbage-collected according to the shared static-site retention policy.
+
+### What should be done in the future
+
+- Upload the final design and diary bundle to reMarkable.
+- Pin the reusable `infra-tooling` workflow to a reviewed ref instead of `@main`.
+- Add a browser smoke test against the production hostname or a preview deployment.
+
+### Code review instructions
+
+- Review source commit `2b00365`, k3s commit `6318db1`, bootstrap PR #285, and image-pin PR #286.
+- Inspect the live state:
+
+  ```bash
+  kubectl -n argocd get application cam
+  kubectl -n static-sites get job,pod,ingress,certificate
+  curl -fsSI https://cam.yolo.scapegoat.dev/
+  ```
+
+- Confirm there is no CAM-specific pull Secret or Vault resource.
+
+### Technical details
+
+- Public image: `ghcr.io/go-go-golems/go-go-cam:sha-2b00365`.
+- Argo revision: `2f3f07a47756d67e7a10510cedd9558996a15f9f`.
+- Active release path: `/srv/sites/cam.yolo.scapegoat.dev/releases/sha-2b00365`.
+- Public URL: `https://cam.yolo.scapegoat.dev/`.
