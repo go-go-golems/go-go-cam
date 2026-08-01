@@ -1,0 +1,7 @@
+FROM alpine:3.20
+
+WORKDIR /
+COPY dist/ /site/
+
+RUN test -f /site/index.html \
+    && find /site -type f | sort > /site-manifest.txt

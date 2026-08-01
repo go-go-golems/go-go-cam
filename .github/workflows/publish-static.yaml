@@ -1,4 +1,4 @@
-name: publish-image
+name: publish-static-site
 
 on:
   pull_request:
@@ -13,7 +13,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: publish-image-${{ github.ref }}
+  group: publish-static-site-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -21,10 +21,10 @@ jobs:
     uses: go-go-golems/infra-tooling/.github/workflows/publish-ghcr-image.yml@main
     secrets: inherit
     with:
-      dockerfile: ./Dockerfile
+      dockerfile: ./Dockerfile.static
       build_context: .
       setup_go: false
-      test_command: corepack enable && pnpm install --frozen-lockfile && pnpm test
+      test_command: corepack enable && pnpm install --frozen-lockfile && pnpm test && pnpm build && test -f dist/index.html
       gitops_target_config: deploy/gitops-targets.json
       push_image: ${{ github.event_name != 'pull_request' }}
       open_gitops_pr: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
