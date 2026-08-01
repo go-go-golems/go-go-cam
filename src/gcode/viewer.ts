@@ -1,4 +1,5 @@
 import { parseGcode, type ParsedGcode } from "./parser";
+import { formatDuration } from "../lib/utils";
 
 type ColorMode = "toolpath" | "tool" | "depth";
 
@@ -203,7 +204,8 @@ export function setupGcodeViewer(): GcodeViewerHandle {
         `${name} — T${tp.tool ?? "?"}${toolName ? ` (${toolName})` : ""}` +
         `${tp.spindleRpm ? `, S${tp.spindleRpm}` : ""}` +
         `, cut ${tp.cutDistance >= 1000 ? (tp.cutDistance / 1000).toFixed(2) + "m" : tp.cutDistance.toFixed(0) + "mm"}` +
-        `, Z ${tp.minZ === Infinity ? "—" : tp.minZ.toFixed(2)}…${tp.maxZ === -Infinity ? "—" : tp.maxZ.toFixed(2)}`;
+        `, Z ${tp.minZ === Infinity ? "—" : tp.minZ.toFixed(2)}…${tp.maxZ === -Infinity ? "—" : tp.maxZ.toFixed(2)}` +
+        `, ~${formatDuration(tp.estimatedMinutes)}`;
       label.append(box, chip, text);
       li.appendChild(label);
       list.appendChild(li);
@@ -231,7 +233,7 @@ export function setupGcodeViewer(): GcodeViewerHandle {
     el.textContent =
       `${state.name} — ${parsed.lineCount.toLocaleString()} lines, ${parsed.segments.length.toLocaleString()} segments, ` +
       `${parsed.toolpaths.length} toolpaths, ${parsed.tools.size || "?"} tools. ` +
-      `Cut ${(parsed.cutDistance / 1000).toFixed(2)}m, rapid ${(parsed.rapidDistance / 1000).toFixed(2)}m.` +
+      `Cut ${(parsed.cutDistance / 1000).toFixed(2)}m, rapid ${(parsed.rapidDistance / 1000).toFixed(2)}m, ~${formatDuration(parsed.estimatedMinutes)} motion time.` +
       (b ? ` XY ${(b.maxX - b.minX).toFixed(1)} × ${(b.maxY - b.minY).toFixed(1)}mm, Z ${b.minZ.toFixed(2)}…${b.maxZ.toFixed(2)}mm.` : "") +
       (meta ? ` ${meta}` : "");
   }

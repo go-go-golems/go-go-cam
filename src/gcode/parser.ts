@@ -32,6 +32,7 @@ export interface ToolpathInfo {
   segments: number;
   cutDistance: number;
   rapidDistance: number;
+  estimatedMinutes: number;
   minZ: number;
   maxZ: number;
   firstLine: number;
@@ -53,7 +54,12 @@ export interface ParsedGcode {
   lineCount: number;
   cutDistance: number;
   rapidDistance: number;
+  /** Pure-motion estimate: cut distance at programmed feed, rapids at RAPID_MM_MIN. */
+  estimatedMinutes: number;
 }
+
+/** Assumed G0 rapid rate (mm/min) — G-code carries no feed word for rapids. */
+export const RAPID_MM_MIN = 3000;
 
 function parseMkrComment(
   body: string,
@@ -130,6 +136,7 @@ export function parseGcode(text: string): ParsedGcode {
   let currentToolpath = -1;
   let cutDistance = 0;
   let rapidDistance = 0;
+  let estimatedMinutes = 0;
 
   const ensureToolpath = (firstLine: number): ToolpathInfo => {
     if (currentToolpath < 0) startToolpath(firstLine, undefined);
@@ -149,6 +156,7 @@ export function parseGcode(text: string): ParsedGcode {
       segments: 0,
       cutDistance: 0,
       rapidDistance: 0,
+      estimatedMinutes: 0,
       minZ: Infinity,
       maxZ: -Infinity,
       firstLine
@@ -272,9 +280,14 @@ export function parseGcode(text: string): ParsedGcode {
       if (rapid) {
         tp.rapidDistance += d;
         rapidDistance += d;
+        tp.estimatedMinutes += d / RAPID_MM_MIN;
+        estimatedMinutes += d / RAPID_MM_MIN;
       } else {
         tp.cutDistance += d;
         cutDistance += d;
+        const rate = feed || 1000;
+        tp.estimatedMinutes += d / rate;
+        estimatedMinutes += d / rate;
       }
       tp.minZ = Math.min(tp.minZ, qz);
       tp.maxZ = Math.max(tp.maxZ, qz);
@@ -343,6 +356,7 @@ export function parseGcode(text: string): ParsedGcode {
     bounds,
     lineCount: lines.length,
     cutDistance,
-    rapidDistance
+    rapidDistance,
+    estimatedMinutes
   };
 }
