@@ -11,20 +11,30 @@ DocType: design-doc
 Intent: long-term
 Owners: []
 RelatedFiles:
+    - Path: repo://index.html
+      Note: Square-frame and bridge UI controls (commit 24263b0)
     - Path: repo://src/lib/cutout.test.ts
       Note: Geometry, mirroring, span, and guard regression tests (commit 801096a)
     - Path: repo://src/lib/cutout.ts
       Note: Pure square frame and bridge-pass geometry implementation (commit 801096a)
     - Path: repo://src/lib/operations.ts
-      Note: Depth-ladder and G-code emission contract to generalize
+      Note: |-
+        Depth-ladder and G-code emission contract to generalize
+        Pass-specific path scheduling and generic pointwise-depth G-code emission (commit 24263b0)
+    - Path: repo://src/lib/pipeline.test.ts
+      Note: Operation order and parsed bridge G-code integration test (commit 24263b0)
     - Path: repo://src/lib/pipeline.ts
-      Note: Current profile-cutout planning and final operation integration seam
+      Note: |-
+        Current profile-cutout planning and final operation integration seam
+        Square-frame planner integration as final operation (commit 24263b0)
     - Path: repo://src/lib/toolpath.ts
       Note: Pixel-to-machine transformation required for the square
     - Path: repo://src/lib/types.ts
       Note: Shared settings and path depth contracts
     - Path: repo://src/main.ts
-      Note: Browser settings reader requiring new bridge fields
+      Note: |-
+        Browser settings reader requiring new bridge fields
+        Bridge setting parsing and operator warning (commit 24263b0)
     - Path: repo://testdata/MakeraBadge.nc
       Note: Primary G-code evidence for the four ramped holding bridges
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/scripts/01-analyze-makera-contour-bridges.py
@@ -35,6 +45,7 @@ LastUpdated: 2026-08-01T20:20:00-04:00
 WhatFor: Enable an intern to safely implement and validate a square final cutout with bridge ramps in the ABS Bicolor V-Engraver.
 WhenToUse: Read before changing cutout settings, geometry planning, G-code emission, generated fixtures, or CNC validation.
 ---
+
 
 
 

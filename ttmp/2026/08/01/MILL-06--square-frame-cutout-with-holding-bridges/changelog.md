@@ -34,3 +34,13 @@ Implemented and tested the pure square-frame planner with four pass-proportional
 - /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/lib/cutout.test.ts — Planner tests
 - /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/lib/cutout.ts — Planner
 
+
+## 2026-08-01
+
+Integrated square-frame bridge planning into G-code emission, pipeline, UI, and regression coverage (commit 24263b0).
+
+### Related Files
+
+- /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/lib/operations.ts — Pass-specific XYZ emission
+- /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/lib/pipeline.ts — Final square-frame operation
+

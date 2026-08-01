@@ -15,6 +15,12 @@ RelatedFiles:
       Note: Step 8 verification evidence (commit 801096a)
     - Path: repo://src/lib/cutout.ts
       Note: Step 8 pure planner implementation (commit 801096a)
+    - Path: repo://src/lib/operations.ts
+      Note: Step 9 writer implementation (commit 24263b0)
+    - Path: repo://src/lib/pipeline.test.ts
+      Note: Step 9 structural verification (commit 24263b0)
+    - Path: repo://src/lib/pipeline.ts
+      Note: Step 9 pipeline integration (commit 24263b0)
     - Path: repo://testdata/MakeraBadge.nc
       Note: Primary evidence inspected chronologically
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/design-doc/01-square-frame-cutout-with-holding-bridges-analysis-design-and-implementation-guide.md
@@ -27,6 +33,7 @@ LastUpdated: 2026-08-01T20:09:00-04:00
 WhatFor: Preserve the research trail and implementation review guidance for MILL-06.
 WhenToUse: Read before continuing ticket research or implementing the proposed cutout.
 ---
+
 
 
 
@@ -480,3 +487,64 @@ This commit establishes the physical contract without yet changing generated job
 ### Technical details
 - The retained cut depth is `stockThickness - cutoutBridgeThickness`; it is positive below-surface depth, not emitted negative Z.
 - The bridge formula is `finalSpan * (nominalDepth - retainedCutDepth) / (finalDepth - retainedCutDepth)` only for passes deeper than the retained cut depth.
+
+## Step 9: Emit, integrate, and regression-test square frame bridge routes
+
+I generalized program emission from “one shared path list for every pass” to an optional pass-specific route schedule, then wired the square-frame plan through the DOM-free pipeline, browser settings, warning text, and batch defaults. An enabled cutout now creates `[T1]Square Frame Cutout` after engraving and optional flat clearing; its first path is a full square at the shallow pass and its later paths contain continuous XYZ bridge ramps at all four side midpoints.
+
+The implementation retains current behavior where it is not intentionally changed. Shared constant paths continue to repeat over their ladder, while existing `detail` paths remain single-pass variable-depth V-carving. The new pointwise-depth logic is data-driven, so a contour may legitimately carry bridge depth without being mislabeled as a detail path.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 7)
+
+**Assistant interpretation:** Complete the G-code, pipeline, and browser portions of the approved square-frame bridge feature while preserving existing behavior and testing regressions.
+
+**Inferred user intent:** The UI should produce a safe, inspectable Makera-style final cutout rather than only expose an unconnected geometry helper.
+
+**Commit (code):** 24263b060ccdafe2c81a41241954d48f94a4fd09 — "Feat: emit bridged square frame cutouts"
+
+### What I did
+- Added `Operation.pathsByPass` to `src/lib/operations.ts` and changed the writer loop to select scheduled routes by depth-pass index.
+- Generalized pointwise-depth detection from `kind === "detail"` to actual `DepthPoint.depth` data, while retaining the existing single-pass behavior for `detail` paths.
+- Replaced the silhouette tracing/fill/offset cutout block in `src/lib/pipeline.ts` with `planSquareFrameCutout` and named the terminal operation `[T1]Square Frame Cutout`.
+- Added bridge controls and physical-retention guidance to `index.html`, clamped/read them in `src/main.ts`, and added a runtime warning when cutout is enabled.
+- Added bridge defaults to `scripts/generate-test-gcode.ts` without enabling cutout in existing fixture generation.
+- Added emitter regression tests in `src/lib/pocketing.test.ts` and pipeline/operation-order/G-code structural test coverage in `src/lib/pipeline.test.ts`.
+- Ran `pnpm test` and `pnpm build`; after fixing discovered issues, both passed with 4 test files / 25 tests and a successful Vite production build.
+
+### Why
+- Bridge geometry varies by pass, so a single shared `paths` array cannot faithfully emit the Makera behavior.
+- Reading bridge thickness from the UI in physical material units lets the planner derive machine coordinates from stock/surface settings rather than exposing a brittle fixed Z value.
+
+### What worked
+- The integration test proves operation order is `[T2]Engrave`, `[T1]Flat Clearing`, `[T1]Square Frame Cutout`, with the empty flat-clearing operation naturally skipped from emitted G-code.
+- Parsed generated G-code contains a final named square-frame toolpath, three ladder passes, four retained-depth bridge centers, and simultaneous XY/Z ramp segments ending at Z-0.5.
+- Emitter tests prove a pass-specific contour route emits XYZ ramps and existing V-detail output stays single-pass.
+- The browser warns that four bridges intentionally retain material and the part must only be removed after spindle stop.
+
+### What didn't work
+- First `pnpm build` failed with `TS2739` because `readSettings` did not yet return the two newly required `Settings` fields. I added `cutoutBridgeThickness` and `cutoutBridgeSpan` parsing/clamping.
+- A pipeline test initially expected `Z-0.5 F800` as a raw substring. The writer emits feed only on the first XY move of a path, so bridge midpoint moves correctly omit an explicit feed and inherit it. I replaced the brittle text assertion with parsed-segment checks for simultaneous XY/Z motion ending at Z-0.5.
+- A second build failed with `TS6133: 'pixelToMachine' is declared but its value is never read` after removal of the old silhouette block. I removed that stale import, then reran both validation commands successfully.
+
+### What I learned
+- `generateProgram` uses modal feed; raw line assertions must not assume every bridge move includes `F`. Parsing segments is a stronger test of the physical path contract.
+- The same closed start/end point enables direct deeper re-plunges between passes without a retract, preserving the existing writer’s efficient ladder behavior.
+
+### What was tricky to build
+- The writer must choose between path-level constant depth and point-level depth without changing V-detail semantics. I used `path.points.some((point) => point.depth !== undefined)` for the emission mode and preserved the `detail` single-pass guard. This lets bridged contours be colored/countable as contours while retaining the old V-carve restriction.
+
+### What warrants a second pair of eyes
+- Review G-code coordinates for a tall/narrow artwork: the square may legitimately extend outside the image’s nominal preview rectangle to preserve its configured physical margin. The G-code viewer/parsed bounds is the authoritative geometry view until a future preview auto-framing enhancement.
+
+### What should be done in the future
+- Run the built application in a browser, generate/inspect a real UI job, serve it on the LAN, and then perform the documented simulator/air-cut/sacrificial-stock validation before milling production material.
+
+### Code review instructions
+- Review `src/lib/operations.ts` pass loop and `src/lib/pipeline.ts` final operation construction together.
+- Run `pnpm test && pnpm build`; inspect `src/lib/pipeline.test.ts` for final operation ordering and parsed XYZ bridge evidence.
+
+### Technical details
+- `pathsByPass` is optional, so all pre-existing operations retain their old shared-route behavior.
+- The first cutout pass is `Toolpath.depth=0.5`; bridge routes explicitly carry positive depths per point and the writer converts them to negative surface-relative G-code Z.
