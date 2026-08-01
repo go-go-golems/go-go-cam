@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ABS Bicolor V-Engraver</title>
+</head>
+<body>
+<header>
+  <div>
+    <h1>ABS Bicolor V-Engraver</h1>
+    <p>Threshold, clean, vectorize, create shallow pocket passes, and cap variable-depth V-carving.</p>
+  </div>
+  <div class="offline-badge">Vite build · runs locally</div>
+</header>
+
+<div class="app">
+  <aside class="panel controls">
+    <fieldset>
+      <legend>Artwork</legend>
+      <div class="file-row">
+        <input id="imageFile" type="file" accept="image/png,image/jpeg,image/webp,image/bmp">
+        <button id="sampleBtn" type="button">Cat sample</button>
+      </div>
+      <div id="imageName" class="hint">Embedded cat sample loaded.</div>
+      <div class="row">
+        <label for="finishedWidth">Finished artwork width (mm)</label>
+        <input id="finishedWidth" type="number" min="5" max="2000" step="0.1" value="100">
+      </div>
+      <div class="row">
+        <label>Derived height (mm)</label>
+        <input id="derivedHeight" type="text" value="—" readonly>
+      </div>
+      <div class="check-row">
+        <input id="autoCrop" type="checkbox" checked>
+        <label for="autoCrop">Crop white border after cleanup</label>
+      </div>
+      <div class="row">
+        <label for="cropPadding">Crop padding (pixels)</label>
+        <input id="cropPadding" type="number" min="0" max="100" step="1" value="8">
+      </div>
+      <div class="check-row">
+        <input id="invertMask" type="checkbox">
+        <label for="invertMask">Invert engraved and untouched regions</label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Image processing</legend>
+      <div class="row">
+        <label for="maxDimension">Processing max dimension (px)</label>
+        <input id="maxDimension" type="number" min="200" max="1800" step="50" value="1000">
+      </div>
+      <div class="row">
+        <label for="thresholdMode">Threshold</label>
+        <select id="thresholdMode">
+          <option value="otsu" selected>Otsu automatic</option>
+          <option value="manual">Manual</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="manualThreshold">Manual level (0–255)</label>
+        <input id="manualThreshold" type="number" min="0" max="255" step="1" value="128" disabled>
+      </div>
+      <div class="row">
+        <label for="openRadius">Opening radius (px)</label>
+        <input id="openRadius" type="number" min="0" max="5" step="1" value="1">
+      </div>
+      <div class="row">
+        <label for="closeRadius">Closing radius (px)</label>
+        <input id="closeRadius" type="number" min="0" max="5" step="1" value="1">
+      </div>
+      <div class="row">
+        <label for="minArea">Minimum black island (px²)</label>
+        <input id="minArea" type="number" min="0" max="100000" step="1" value="12">
+      </div>
+      <div class="row">
+        <label for="simplifyTolerance">Vector tolerance (mm)</label>
+        <input id="simplifyTolerance" type="number" min="0" max="2" step="0.01" value="0.05">
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Material and V-bit</legend>
+      <div class="row">
+        <label for="vAngle">Included bit angle (degrees)</label>
+        <input id="vAngle" type="number" min="5" max="150" step="1" value="45">
+      </div>
+      <div class="row">
+        <label for="capThickness">Measured top-layer thickness (mm)</label>
+        <input id="capThickness" type="number" min="0.01" max="5" step="0.01" value="0.10">
+      </div>
+      <div class="row">
+        <label for="breakthrough">Breakthrough margin (mm)</label>
+        <input id="breakthrough" type="number" min="0" max="2" step="0.01" value="0.02">
+      </div>
+      <div class="row">
+        <label for="stepover">Pocket stepover (% of cut width)</label>
+        <input id="stepover" type="number" min="10" max="95" step="1" value="45">
+      </div>
+      <div class="row">
+        <label for="rasterDirection">Pocket direction</label>
+        <select id="rasterDirection">
+          <option value="horizontal" selected>Horizontal</option>
+          <option value="vertical">Vertical</option>
+        </select>
+      </div>
+      <div class="hint">Target depth is top-layer thickness plus the breakthrough margin. Measure the stock rather than relying on its nominal specification.</div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Machine and G-code</legend>
+      <div class="row">
+        <label for="originX">Artwork X offset (mm)</label>
+        <input id="originX" type="number" step="0.1" value="0">
+      </div>
+      <div class="row">
+        <label for="originY">Artwork Y offset (mm)</label>
+        <input id="originY" type="number" step="0.1" value="0">
+      </div>
+      <div class="row">
+        <label for="surfaceZ">Material surface Z (mm)</label>
+        <input id="surfaceZ" type="number" step="0.01" value="0">
+      </div>
+      <div class="row">
+        <label for="safeZ">Clearance above surface (mm)</label>
+        <input id="safeZ" type="number" min="0.1" max="100" step="0.1" value="3">
+      </div>
+      <div class="row">
+        <label for="feedXY">Cut feed (mm/min)</label>
+        <input id="feedXY" type="number" min="1" max="50000" step="10" value="600">
+      </div>
+      <div class="row">
+        <label for="feedPlunge">Plunge feed (mm/min)</label>
+        <input id="feedPlunge" type="number" min="1" max="20000" step="10" value="150">
+      </div>
+      <div class="row">
+        <label for="spindleRpm">Spindle speed (RPM)</label>
+        <input id="spindleRpm" type="number" min="0" max="100000" step="100" value="14000">
+      </div>
+      <div class="check-row">
+        <input id="emitSpindle" type="checkbox" checked>
+        <label for="emitSpindle">Emit M3/M5 spindle commands</label>
+      </div>
+      <div class="check-row">
+        <input id="mirrorX" type="checkbox">
+        <label for="mirrorX">Mirror X</label>
+      </div>
+      <div class="check-row">
+        <input id="mirrorY" type="checkbox">
+        <label for="mirrorY">Mirror Y</label>
+      </div>
+      <div class="hint">Output is metric, absolute-position GRBL-style G-code with the artwork origin at its lower-left corner before offsets and mirroring.</div>
+    </fieldset>
+  </aside>
+
+  <main class="panel workspace">
+    <div class="workspace-top">
+      <div>
+        <h2>Toolpath workspace</h2>
+        <div class="hint">The G-code generator uses a shallow, depth-capped hybrid rather than unrestricted sign-style V-carving.</div>
+      </div>
+      <div class="actions">
+        <button id="processBtn" class="primary" type="button">Process and generate</button>
+        <button id="downloadGcode" type="button" disabled>Download G-code</button>
+        <button id="downloadSvg" type="button" disabled>Download SVG</button>
+        <button id="downloadMask" type="button" disabled>Download mask PNG</button>
+      </div>
+    </div>
+
+    <div id="status" class="status">Ready. Review the parameters, then process the sample or load another image.</div>
+
+    <div class="preview-grid">
+      <figure>
+        <figcaption>Source</figcaption>
+        <canvas id="sourceCanvas" width="640" height="480"></canvas>
+      </figure>
+      <figure>
+        <figcaption>Clean engraving mask <span id="thresholdReadout" class="hint"></span></figcaption>
+        <canvas id="maskCanvas" width="640" height="480"></canvas>
+      </figure>
+      <figure>
+        <figcaption>
+          Toolpaths
+          <span class="legend"><span class="raster">Pocket</span><span class="contour">Edge</span><span class="detail">V-detail</span></span>
+        </figcaption>
+        <canvas id="toolpathCanvas" width="640" height="480"></canvas>
+      </figure>
+    </div>
+
+    <div id="metrics" class="info-grid">
+      <div class="metric"><div class="label">Processed size</div><div id="metricPixels" class="value">—</div></div>
+      <div class="metric"><div class="label">Artwork size</div><div id="metricSize" class="value">—</div></div>
+      <div class="metric"><div class="label">Target depth</div><div id="metricDepth" class="value">—</div></div>
+      <div class="metric"><div class="label">V-width at depth</div><div id="metricWidth" class="value">—</div></div>
+      <div class="metric"><div class="label">Toolpaths</div><div id="metricPaths" class="value">—</div></div>
+      <div class="metric"><div class="label">Cut distance</div><div id="metricDistance" class="value">—</div></div>
+      <div class="metric"><div class="label">Estimated cycle</div><div id="metricTime" class="value">—</div></div>
+      <div class="metric"><div class="label">G-code lines</div><div id="metricLines" class="value">—</div></div>
+    </div>
+
+    <ul id="warnings" class="warnings"></ul>
+
+    <details>
+      <summary>Algorithm used</summary>
+      <div class="algorithm">
+        <strong>Raster image:</strong> alpha-over-white luminance → Otsu or manual threshold → binary opening/closing → connected-component filtering → optional crop.<br>
+        <strong>Broad engraved regions:</strong> chamfer distance transform → tool-center mask eroded by the V-bit surface radius at the capped depth → serpentine scanline pocketing → simplified boundary finish paths.<br>
+        <strong>Narrow details:</strong> subtract estimated broad-pass coverage → Zhang–Suen thinning → graph tracing → Ramer–Douglas–Peucker simplification → variable Z computed from local half-width and capped at the material depth limit.<br>
+        V-bit geometry: <code>surface width = 2 × depth × tan(angle ÷ 2)</code> and <code>depth = half-width ÷ tan(angle ÷ 2)</code>.
+      </div>
+    </details>
+
+    <details>
+      <summary>G-code preview</summary>
+      <pre id="gcodePreview">No toolpath generated.</pre>
+    </details>
+
+    <section class="gcode-viewer">
+      <div class="workspace-top">
+        <div>
+          <h2>G-code visualizer</h2>
+          <div class="hint">Load any .nc/.gcode file (e.g. a Makera job) or view the generated program. Drag to pan, scroll to zoom.</div>
+        </div>
+        <div class="actions">
+          <input id="gcodeFile" type="file" accept=".nc,.gcode,.ngc,.tap,.txt">
+          <button id="viewGeneratedGcode" type="button" disabled>View generated G-code</button>
+          <button id="gcodeFitBtn" type="button">Fit view</button>
+        </div>
+      </div>
+      <div class="viewer-controls">
+        <label>Color by
+          <select id="gcodeColorMode">
+            <option value="toolpath" selected>Toolpath</option>
+            <option value="tool">Tool</option>
+            <option value="depth">Depth</option>
+          </select>
+        </label>
+        <label><input id="gcodeShowRapids" type="checkbox" checked> Show rapids</label>
+        <label class="progress-label">Progress
+          <input id="gcodeProgress" type="range" min="0" max="1000" value="1000">
+        </label>
+      </div>
+      <div id="gcodeSummary" class="status">No file loaded.</div>
+      <canvas id="gcodeViewerCanvas" width="1200" height="700"></canvas>
+      <div class="viewer-lists">
+        <div>
+          <h3>Toolpaths</h3>
+          <ul id="gcodeToolpathList" class="tp-list"></ul>
+        </div>
+        <div>
+          <h3>Machine events</h3>
+          <ul id="gcodeEventList" class="event-list"></ul>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<footer>
+  Simulate the file, verify the work offset and Z-zero, perform an air cut, and run a depth test on scrap. The generated paths are pixel-derived and are not a substitute for checking the job in your normal CAM/sender workflow.
+</footer>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
