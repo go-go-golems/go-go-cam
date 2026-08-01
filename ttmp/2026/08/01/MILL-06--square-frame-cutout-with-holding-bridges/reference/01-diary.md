@@ -29,6 +29,8 @@ RelatedFiles:
       Note: Primary evidence inspected chronologically
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/design-doc/01-square-frame-cutout-with-holding-bridges-analysis-design-and-implementation-guide.md
       Note: Detailed evidence-backed design recorded by the diary
+    - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/design-doc/02-cam-settings-information-architecture-previews-and-scoped-presets.md
+      Note: Step 14 design outcome
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-frame-margins.png
       Note: Step 13 browser verification
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-preview.png
@@ -45,6 +47,7 @@ LastUpdated: 2026-08-01T20:09:00-04:00
 WhatFor: Preserve the research trail and implementation review guidance for MILL-06.
 WhenToUse: Read before continuing ticket research or implementing the proposed cutout.
 ---
+
 
 
 
@@ -806,3 +809,68 @@ This supersedes the earlier square-only interpretation because independent physi
 - Uniform mode tool-center clearance per side = `cutoutMargin + flatDiameter / 2`; individual mode uses each side’s margin plus the same radius.
 - Default `cutoutCornerRadius=3`; zero is supported for deliberate sharp corners.
 - Settings transfer/storage changed from v1 to v2 because the frame setting set gained six required fields.
+
+## Step 14: Design an understandable CAM settings workspace before adding more controls
+
+The new rounded-frame controls made the existing single settings sidebar visibly dense, and the requested T1 depth scheduling introduces another depth parameter that could easily be confused with cutout stepdown. I therefore paused implementation and wrote a dedicated design for task-oriented workspaces, detailed accessible setting help, small truthful geometry explainers, and scoped presets. The design keeps the current flat runtime `Settings` boundary while presenting it in a more operator-readable form.
+
+The design also identifies a narrow, low-risk T1 clearing change: add a separate `flatClearingStepdown` and reuse the existing `makePassLadder` plus constant-depth route emission. It explicitly preserves `targetDepth` as the final depth and keeps cutout stepdown independent. No production UI or G-code behavior changed during this research/design step.
+
+### Prompt Context
+
+**User prompt (verbatim):** "Add tooltips on the settings with a pretty detailed description of what they are for. also, for the T1 wide area clear, be able to specify thinner passes to get to deeper depth.
+
+We start to have a lot of parameters, so let's first brainstorm about how to organize them in a way where they can be well understood, potentially with little simulation boxes where one can see what they do, and grouped differently, and maybe with some higher order settings that can then be broken down and tweaked in smaller steps, and also saving settings for the different logical parts of the CAM parameters.
+
+Output some of the ideas in a new design doc, with ascii screenshot of what these could look like, and we don't need to have a single big ass page with everything at once anymore, ui wise.
+
+[REMINDER] Output a <summary>...</summary> block at the VERY END of your response. This is mandatory."
+
+**Assistant interpretation:** Design, rather than immediately implement, a comprehensible multi-workspace CAM UI with detailed tooltips, bounded visual explainers, scoped settings reuse, and an independent multi-pass T1 wide-clearing control.
+
+**Inferred user intent:** Keep CAM capability growing without creating an opaque wall of numeric inputs or conflating material, operation, image, and machine-safety choices.
+
+**Commit (code):** N/A — design/documentation only.
+
+### What I did
+- Inspected the current complete sidebar, flat `Settings` contract, persistence/transfer envelope, T1 pipeline routing, and existing pass-ladder/emitter behavior.
+- Created `design-doc/02-cam-settings-information-architecture-previews-and-scoped-presets.md`.
+- Proposed five workspaces: Artwork & outcome, Engraving (T2), Flat end mill (T1), Stock & holding, and Machine & export; Settings transfer becomes Recipes & presets rather than an always-visible form block.
+- Added an ASCII desktop sketch containing a review card, Basic/Advanced split, T1 clearing depth ladder, and frame explainer.
+- Defined a typed, reusable accessible help registry and detailed operator content for T1 clearing, target depth, flat-tool coverage, frame geometry, bridges, and machine Z motion.
+- Proposed four bounded explainers: V-bit cross-section, T1 depth ladder, frame plan, and machine-Z motion; each is explicitly not a collision/material-force simulator.
+- Specified `flatClearingStepdown`, its pass-ladder pseudocode, validation, parser tests, and the separation from `cutoutStepdown`.
+- Proposed explicitly scoped local/importable recipes plus a before-apply diff, while preserving the existing image-specific whole-job transfer unchanged.
+
+### Why
+- Current controls are technically grouped but the Operations section mixes unrelated decision layers: wide-area clearing, tool setup, frame geometry, stock depth, and bridges.
+- Existing emitter logic already supports repeated constant-depth paths over a ladder, so the new T1 behavior can be made clear and reliable without redesigning the pocket planner.
+
+### What worked
+- The code inspection established that `makePassLadder(totalDepth, stepdown)` and `constDepth = Math.min(path.depth, -passZ)` directly provide correct shallow-to-deep T1 clearing: `0.12 / 0.10` becomes `[-0.10, -0.12]` and lands at the unchanged target depth.
+- The design gives every requested theme—tooltips, visual boxes, grouping, higher-order controls, scoped saving, and T1 passes—a concrete design/API/test path rather than generic ideas.
+
+### What didn't work
+- No commands failed. No tooltips or T1 multi-pass behavior were implemented because the prompt explicitly requested brainstorming and a design document first.
+
+### What I learned
+- The current flat Settings structure is an appropriate pipeline boundary and should not be nested merely to mirror UI presentation; a typed UI/preset registry can provide hierarchy without G-code regression risk.
+- An expander visual is useful only if it shows exact derived geometry/depth and clearly states its non-simulation limits.
+
+### What was tricky to build
+- The central ambiguity is that T1 clear depth, V-bit target depth, and frame cutout stepdown all touch Z but control different operations. The design resolves it by giving T1 its own label, “clearing depth per pass,” using `targetDepth` as its immutable endpoint, and showing the generated ladder directly.
+
+### What warrants a second pair of eyes
+- Choose a physically validated default for `flatClearingStepdown`; the proposed 0.10mm is a UI seed only, not evidence that any actual tool/material/workholding combination is safe.
+- Review the proposed preset boundary for `stockThickness`: it may be a per-job measurement rather than a reusable material recipe value.
+
+### What should be done in the future
+- Decide the open questions in the design, then implement phases 1–5 before adding named scoped presets; do not bulk-move the existing form without typed metadata coverage tests.
+
+### Code review instructions
+- Read `design-doc/02-cam-settings-information-architecture-previews-and-scoped-presets.md` from Executive Summary through Decision Records.
+- Cross-check the T1 proposal against `src/lib/pipeline.ts` flat operation construction and `src/lib/operations.ts` ladder/constant-depth emission.
+
+### Technical details
+- Proposed setting: `flatClearingStepdown: number`, minimum effective 0.05mm, initial default proposal 0.10mm.
+- Proposed scoped preset envelope: `abs-bicolor-v-engraver/cam-preset`, v1, named scope, values, optional note; it is separate from existing image whole-job transfer `abs-bicolor-v-engraver/settings`, v2.

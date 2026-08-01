@@ -19,3 +19,4 @@
 - [x] Run structural G-code analysis, browser UI inspection, test/build, and update ticket documentation/delivery. <!-- t:3ond -->
 - [x] Add copy/paste settings transfer and image-indexed localStorage restoration with tests and browser verification. <!-- t:76fm -->
 - [x] Add rounded frame corners and selectable uniform or per-side margins, with geometry/UI/browser verification. <!-- t:nqo2 -->
+- [x] Design CAM settings information architecture, contextual previews/tooltips, scoped presets, and T1 clearing stepdown before implementation. <!-- t:bpkt -->

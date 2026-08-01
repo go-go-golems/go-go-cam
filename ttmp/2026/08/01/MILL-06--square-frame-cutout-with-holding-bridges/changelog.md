@@ -84,3 +84,12 @@ Added rounded frame corners and selectable uniform/per-side margins with planner
 - /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/lib/cutout.ts — Rounded frame planner
 - /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/main.ts — Margin-mode control wiring
 
+
+## 2026-08-01
+
+Designed task-oriented CAM workspaces, detailed help/explainers, scoped presets, and independent multi-pass T1 clearing before implementation.
+
+### Related Files
+
+- /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/design-doc/02-cam-settings-information-architecture-previews-and-scoped-presets.md — New design proposal
+
