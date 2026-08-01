@@ -271,6 +271,51 @@ describe("generateProgram", () => {
     expect(lines[thirdPlunge - 1]).toBe("G1 X0 Y0");
   });
 
+  it("emits a pass-specific bridged contour with pointwise XYZ ramps", () => {
+    const model = testModel(32, 32);
+    const shallow = square(0.5);
+    const bridged = {
+      kind: "contour" as const,
+      closed: true,
+      points: [
+        { x: 0, y: 0, depth: 1 },
+        { x: 5, y: 0, depth: 0.5 },
+        { x: 10, y: 0, depth: 1 },
+        { x: 10, y: 10, depth: 1 },
+        { x: 0, y: 10, depth: 1 },
+        { x: 0, y: 0, depth: 1 }
+      ]
+    };
+    const gcode = generateProgram(
+      [{ name: "[T1]Square Frame Cutout", tool: flat, paths: [], pathsByPass: [[shallow], [bridged]], passDepths: [-0.5, -1] }],
+      model, "bridged frame"
+    );
+    const lines = gcode.split("\n");
+
+    expect(lines.filter((line) => line === "G1 Z-0.5 F150")).toHaveLength(1);
+    expect(lines.filter((line) => line === "G1 Z-1 F150")).toHaveLength(1);
+    expect(lines).toContain("G1 X5 Y0 Z-0.5 F300");
+    expect(lines).toContain("G1 X10 Y0 Z-1");
+    expect(lines.filter((line) => line === "G1 X10 Y0 F300")).toHaveLength(1);
+  });
+
+  it("preserves single-pass pointwise V-detail emission", () => {
+    const model = testModel(32, 32);
+    const detail = {
+      kind: "detail" as const,
+      points: [{ x: 0, y: 0, depth: 0.1 }, { x: 1, y: 0, depth: 0.2 }]
+    };
+    const gcode = generateProgram(
+      [{ name: "[T2]Detail", tool: engraver, paths: [detail], passDepths: [-0.25, -0.5] }],
+      model, "detail"
+    );
+    const lines = gcode.split("\n");
+
+    expect(lines).toContain("G1 Z-0.1 F500");
+    expect(lines).toContain("G1 X1 Y0 Z-0.2 F1000");
+    expect(lines).not.toContain("G1 Z-0.5 F500");
+  });
+
   it("skips empty operations entirely", () => {
     const model = testModel(32, 32);
     const gcode = generateProgram(

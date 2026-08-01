@@ -47,11 +47,16 @@ export interface Operation {
   /** Display name, e.g. "[T1]Flat Clearing". Also emitted as MKR TOOLPATH name. */
   name: string;
   tool: ToolSpec;
+  /** Default path list repeated at every pass when `pathsByPass` is absent. */
   paths: Toolpath[];
   /**
+   * Optional pass-specific routes. Entry i is emitted only at passDepths[i],
+   * allowing a cutout to change its XY/depth profile across the Z ladder.
+   */
+  pathsByPass?: Toolpath[][];
+  /**
    * Z cut levels relative to surface, shallow to deep, e.g. [-0.5, -1, -1.5]
-   * for a cut-through ladder or [-0.12] for a single engraving pass. Detail
-   * paths (variable depth) ignore this and use their own per-point depths.
+   * for a cut-through ladder or [-0.12] for a single engraving pass.
    */
   passDepths: number[];
 }
@@ -73,7 +78,9 @@ export function makePassLadder(totalDepth: number, stepdown: number): number[] {
 export function generateProgram(ops: Operation[], model: Model, jobName: string): string {
   const s = model.settings;
   const safeAbsolute = s.surfaceZ + s.safeZ;
-  const active = ops.filter((op) => op.paths.length > 0);
+  const active = ops.filter((op) =>
+    op.paths.length > 0 || op.pathsByPass?.some((paths) => paths.length)
+  );
   // Body is built first so the header's TIME line can carry its actual
   // motion-time estimate (computed by round-tripping through our parser).
   const lines: string[] = [];
@@ -161,20 +168,24 @@ export function generateProgram(ops: Operation[], model: Model, jobName: string)
       atDepth = false;
     };
 
-    for (const passZ of op.passDepths) {
-      for (const path of op.paths) {
+    for (let passIndex = 0; passIndex < op.passDepths.length; passIndex++) {
+      const passZ = op.passDepths[passIndex];
+      const passPaths = op.pathsByPass?.[passIndex] ?? op.paths;
+      for (const path of passPaths) {
         if (!path.points.length) continue;
+        // Existing V-bit detail paths are intentionally single-pass. Contours
+        // can now carry their own pointwise depth profile on any scheduled pass.
         if (path.kind === "detail" && passZ !== op.passDepths[0]) continue;
         const first = path.points[0];
         reposition(first.x, first.y);
-        if (path.kind === "detail") {
-          // Variable-depth V-details carry their own Z per point; they only
-          // run once, on the shallowest (single) pass.
-          const firstDepth = clamp(first.depth || 0, 0, -Math.min(...op.passDepths));
+        const hasPointwiseDepth = path.points.some((point) => point.depth !== undefined);
+        if (hasPointwiseDepth) {
+          const maxDepth = -Math.min(...op.passDepths);
+          const firstDepth = clamp(first.depth ?? -passZ, 0, maxDepth);
           lines.push(`G1 Z${fmt(s.surfaceZ - firstDepth)} F${fmt(op.tool.feedPlunge, 1)}`);
           for (let p = 1; p < path.points.length; p++) {
             const pt = path.points[p];
-            const depth = clamp(pt.depth || 0, 0, -Math.min(...op.passDepths));
+            const depth = clamp(pt.depth ?? -passZ, 0, maxDepth);
             lines.push(`G1 X${fmt(pt.x)} Y${fmt(pt.y)} Z${fmt(s.surfaceZ - depth)}${p === 1 ? ` F${fmt(op.tool.feedXY, 1)}` : ""}`);
           }
         } else {

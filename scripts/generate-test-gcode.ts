@@ -72,7 +72,9 @@ const settings = deriveSettings({
   cutoutMargin: 2,
   stockThickness: 1.3,
   cutoutStepdown: 0.5,
-  cutoutOvercut: 0.2
+  cutoutOvercut: 0.2,
+  cutoutBridgeThickness: 0.8,
+  cutoutBridgeSpan: 12.4
 });
 
 const outDir = strategyArg === "contour" ? "gcode-tests" : `gcode-tests-${strategyArg}`;

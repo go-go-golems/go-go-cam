@@ -118,6 +118,13 @@ function readSettings(): Settings {
   const targetDepth = capThickness + breakthrough;
   const halfAngle = vAngle * Math.PI / 360;
   const cutWidth = 2 * targetDepth * Math.tan(halfAngle);
+  const stockThickness = clamp(numberValue("stockThickness", 1.3), 0.05, 100);
+  const cutoutBridgeThickness = clamp(
+    numberValue("cutoutBridgeThickness", 0.8),
+    0.01,
+    Math.max(0.01, stockThickness - 0.01)
+  );
+  const cutoutBridgeSpan = clamp(numberValue("cutoutBridgeSpan", 12.4), 0.01, 10000);
 
   return {
     finishedWidth,
@@ -163,9 +170,11 @@ function readSettings(): Settings {
     flatPlunge: clamp(numberValue("flatPlunge", 200), 1, 1e5),
     cutoutEnable: checked("cutoutEnable"),
     cutoutMargin: clamp(numberValue("cutoutMargin", 2), 0, 100),
-    stockThickness: clamp(numberValue("stockThickness", 1.3), 0.05, 100),
+    stockThickness,
     cutoutStepdown: clamp(numberValue("cutoutStepdown", 0.5), 0.05, 10),
-    cutoutOvercut: clamp(numberValue("cutoutOvercut", 0.2), 0, 5)
+    cutoutOvercut: clamp(numberValue("cutoutOvercut", 0.2), 0, 5),
+    cutoutBridgeThickness,
+    cutoutBridgeSpan
   };
 }
 
@@ -191,6 +200,11 @@ function updateWarnings(
     "Measure the actual cap layer and cut a stepped depth test before running the artwork.",
     "Simulate the G-code, verify metric units and absolute positioning, then perform an air cut above the stock."
   ];
+  if (model.settings.cutoutEnable) {
+    warnings.push(
+      `The final T1 operation cuts a square frame with four holding bridges (${model.settings.cutoutBridgeThickness.toFixed(2)}mm material retained). Do not remove the part until the spindle has stopped.`
+    );
+  }
   if (foregroundFraction < 0.002) warnings.push("Very little artwork was detected. Check threshold and inversion.");
   if (foregroundFraction > 0.80) warnings.push("Most of the image is marked for engraving. The mask may be inverted or the threshold may be unsuitable.");
   if (model.settings.targetDepth > 0.35) warnings.push("The selected depth is relatively large for a thin cap. Confirm it from a physical cross-section or test coupon.");

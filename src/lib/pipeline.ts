@@ -8,7 +8,6 @@ import {
   chamferDistance,
   countForeground,
   cropTypedArray,
-  fillHoles,
   foregroundBounds,
   makeMask,
   morphologicalClose,
@@ -22,13 +21,12 @@ import {
   makeContourPaths,
   makeDetailPaths,
   makeRasterPaths,
-  pixelToMachine,
   sortPathsNearest
 } from "./toolpath";
 import { makeFermatPocketPaths } from "./fermat";
-import { simplifyClosedLoop, traceBoundaryLoops } from "./geometry";
 import { makeContourPocketPaths } from "./pocketing";
 import { generateProgram, makePassLadder, type Operation, type ToolSpec } from "./operations";
+import { planSquareFrameCutout } from "./cutout";
 import { generateSvg } from "./gcode-gen";
 import { parseGcode } from "../gcode/parser";
 
@@ -225,36 +223,28 @@ export async function runPipeline(
   const orderedDetails = sortPathsNearest(detailPaths, settings.originX, settings.originY);
   const engravePaths = [...pocketPaths, ...orderedContours, ...orderedDetails];
 
-  // --- optional cutout contour around the artwork silhouette (DR-4) ---
-  const cutoutPaths: Toolpath[] = [];
+  // --- optional square frame cutout with four ramped holding bridges ---
+  const cutoutPassDepths = makePassLadder(
+    settings.stockThickness + settings.cutoutOvercut,
+    settings.cutoutStepdown
+  );
+  let cutoutPathsByPass: Toolpath[][] = [];
   if (settings.cutoutEnable) {
-    onStatus("Tracing the cutout contour…");
+    onStatus("Planning square frame cutout and holding bridges…");
     await nextFrame();
-    const distToArtwork = chamferDistance(mask, model.width, model.height, true);
-    const marginPx = (settings.cutoutMargin + settings.flatDiameter / 2) / model.mmPerPx;
-    let cutMask: Uint8Array = new Uint8Array(mask.length);
-    for (let i = 0; i < mask.length; i++) cutMask[i] = distToArtwork[i] <= marginPx ? 1 : 0;
-    cutMask = fillHoles(cutMask, model.width, model.height);
-    const tolerancePx = settings.simplifyTolerance / model.mmPerPx;
-    for (const loop of traceBoundaryLoops(cutMask, model.width, model.height)) {
-      const simplified = simplifyClosedLoop(loop, tolerancePx);
-      if (simplified.length < 4) continue;
-      cutoutPaths.push({
-        kind: "contour",
-        points: simplified.map((p) => pixelToMachine(p.x, p.y, model)),
-        closed: true
-      });
-    }
+    cutoutPathsByPass = planSquareFrameCutout(model, cutoutPassDepths).pathsByPass;
   }
+  const cutoutPaths = cutoutPathsByPass.flat();
 
   const operations: Operation[] = [
     { name: "[T2]Engrave", tool: engraverTool, paths: engravePaths, passDepths: [-settings.targetDepth] },
     { name: "[T1]Flat Clearing", tool: flatTool, paths: flatPaths, passDepths: [-settings.targetDepth] },
     {
-      name: "[T1]Cutout",
+      name: "[T1]Square Frame Cutout",
       tool: flatTool,
       paths: cutoutPaths,
-      passDepths: makePassLadder(settings.stockThickness + settings.cutoutOvercut, settings.cutoutStepdown)
+      pathsByPass: cutoutPathsByPass,
+      passDepths: cutoutPassDepths
     }
   ];
 

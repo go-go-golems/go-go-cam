@@ -146,7 +146,7 @@
       </div>
       <div class="check-row">
         <input id="cutoutEnable" type="checkbox">
-        <label for="cutoutEnable">Cut out around the artwork at the end (T1)</label>
+        <label for="cutoutEnable">Cut out a square frame around the artwork at the end (T1)</label>
       </div>
       <div class="row">
         <label for="cutoutMargin">Cutout margin from artwork (mm)</label>
@@ -164,6 +164,15 @@
         <label for="cutoutOvercut">Overcut past stock bottom (mm)</label>
         <input id="cutoutOvercut" type="number" min="0" max="2" step="0.05" value="0.2">
       </div>
+      <div class="row">
+        <label for="cutoutBridgeThickness">Holding bridge material retained (mm)</label>
+        <input id="cutoutBridgeThickness" type="number" min="0.01" max="50" step="0.05" value="0.8">
+      </div>
+      <div class="row">
+        <label for="cutoutBridgeSpan">Holding bridge span at final pass (mm)</label>
+        <input id="cutoutBridgeSpan" type="number" min="0.01" max="100" step="0.1" value="12.4">
+      </div>
+      <div class="hint">The square frame keeps one ramped holding bridge at each side midpoint. Bridge material is intentionally retained until the spindle stops; remove the part manually afterward.</div>
       <div class="hint">The engraving bit is emitted as T2, the flat end mill as T1, matching MakeraStudio jobs. Tool changes are emitted with the spindle stopped.</div>
     </fieldset>
 
