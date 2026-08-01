@@ -9,4 +9,4 @@
 - [x] Analyze MakeraBadge.nc: tool changes, commands, toolpath structure <!-- t:yzto -->
 - [x] Build G-code visualizer (parser + canvas renderer, tool/toolpath coloring) <!-- t:0tpi -->
 - [x] Wire visualizer into app UI (load .nc file, view generated gcode) <!-- t:0yey -->
-- [ ] Keep diary and changelog updated; commit at intervals <!-- t:mhmc -->
+- [x] Keep diary and changelog updated; commit at intervals <!-- t:mhmc -->

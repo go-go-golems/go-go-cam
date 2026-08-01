@@ -19,42 +19,12 @@ WhatFor: ""
 WhenToUse: ""
 ---
 
-# Contour-parallel pocketing and multi-tool operation pipeline (engrave/clear/cutout)
+# MILL-02 — Contour-parallel pocketing and multi-tool pipeline
 
-## Overview
+**Status: implemented.** Design guide + sources + implementation all landed 2026-08-01.
 
-<!-- Provide a brief overview of the ticket, its goals, and current status -->
-
-## Key Links
-
-- **Related Files**: See frontmatter RelatedFiles field
-- **External Sources**: See frontmatter ExternalSources field
-
-## Status
-
-Current status: **active**
-
-## Topics
-
-- frontend
-- cnc
-- gcode
-- toolpath-generation
-- research
-
-## Tasks
-
-See [tasks.md](./tasks.md) for the current task list.
-
-## Changelog
-
-See [changelog.md](./changelog.md) for recent changes and decisions.
-
-## Structure
-
-- design/ - Architecture and design documents
-- reference/ - Prompt packs, API contracts, context summaries
-- playbooks/ - Command sequences and test procedures
-- scripts/ - Temporary code and tooling
-- various/ - Working notes and research
-- archive/ - Deprecated or reference-only artifacts
+- Design/implementation guide: `design-doc/01-contour-pocketing-and-multi-tool-pipeline-research-and-implementation-guide.md` (uploaded to reMarkable `/ai/2026/08/01/MILL-02`)
+- Diary: `reference/01-diary.md` (2 steps)
+- Sources: `sources/web/` (Clipper2, marching squares, distance transform, LinuxCNC M-codes), `sources/pdf/` (toolpath strategy study)
+- Implementation: `src/lib/pocketing.ts`, `src/lib/operations.ts`, `src/lib/patterns.ts`, operations planner in `src/main.ts`; tests in `src/lib/pocketing.test.ts` (`pnpm exec vitest run`)
+- Verification screenshots: `various/viewer-multiop-square.png`, `various/viewer-ring-contour.png`
