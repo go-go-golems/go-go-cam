@@ -49,3 +49,13 @@ Step 4: Rendered cam, passed cluster validation (51 packages, 0 violations), pas
 
 - /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/ttmp/2026/08/01/MILL-05--production-deployment-of-abs-bicolor-v-engraver-to-cam-yolo-scapegoat-dev/reference/01-investigation-diary.md — Validation evidence and remaining gates
 
+
+## 2026-08-01
+
+Step 5: Refactored CAM from a bespoke Nginx Deployment to the shared Vite static-sites publisher pipeline (source 9c7aff7, k3s f0b538e).
+
+### Related Files
+
+- /home/manuel/code/wesen/2026-03-27--hetzner-k3s/gitops/kustomize/cam/publish-job.yaml — Shared static-sites publisher Job
+- /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/Dockerfile.static — Static /site artifact contract
+

@@ -16,10 +16,12 @@ Owners: []
 RelatedFiles:
     - Path: abs:///home/manuel/code/wesen/2026-03-27--hetzner-k3s/gitops/applications/cam.yaml
       Note: Argo CD production Application
-    - Path: repo://.github/workflows/publish-image.yaml
-      Note: GHCR and GitOps release handoff
-    - Path: repo://Dockerfile
-      Note: Production static image build
+    - Path: abs:///home/manuel/code/wesen/2026-03-27--hetzner-k3s/gitops/kustomize/cam/publish-job.yaml
+      Note: Shared static-sites publisher Job
+    - Path: repo://.github/workflows/publish-static.yaml
+      Note: Vite build and GHCR/GitOps handoff
+    - Path: repo://Dockerfile.static
+      Note: Static artifact image containing /site
     - Path: repo://src/lib/fermat.ts
       Note: Connected Fermat-style pocketing adaptation
     - Path: repo://src/lib/imaging.ts
@@ -45,6 +47,8 @@ WhenToUse: Before changing the CAM algorithms, the G-code contract, or the produ
 ---
 
 
+
+
 # Production Deployment Design and Implementation Guide
 
 ## Executive summary
@@ -53,11 +57,11 @@ This ticket turns the Vite application in `/home/manuel/code/wesen/2026-07-31--c
 
 There is no application server, database, login flow, or server-side image upload. All artwork and G-code processing happens in the browser. Production therefore needs three distinct things:
 
-- A reproducible static web artifact built by Vite and served by Nginx.
-- A release handoff that publishes an immutable GHCR image and opens a GitOps pull request.
-- A k3s/Argo CD package that serves the image over HTTPS at `cam.yolo.scapegoat.dev`.
+- A reproducible Vite static artifact packaged under `/site` in an immutable GHCR image.
+- A release handoff that opens a GitOps pull request using the `static-publisher-job` strategy.
+- A shared static-sites publisher Job and Ingress that let the existing Caddy host serve `cam.yolo.scapegoat.dev`.
 
-The implementation added to the source repository is deliberately small: `Dockerfile`, `nginx.conf`, `.dockerignore`, `deploy/gitops-targets.json`, the reusable GitHub Actions caller, and a pinned `packageManager` entry. The cluster-side package is in `wesen/2026-03-27--hetzner-k3s`, with a dedicated `cam` namespace, AppProject destination, Vault image-pull contract, Deployment, Service, Ingress, and NetworkPolicy.
+The implementation added to the source repository is deliberately small: `Dockerfile.static`, `.dockerignore`, `deploy/gitops-targets.json`, the reusable GitHub Actions caller, and a pinned `packageManager` entry. The cluster-side package is in `wesen/2026-03-27--hetzner-k3s`, using the existing `static-sites` namespace, shared PVC, Caddy Service, Vault image-pull contract, publisher Job, Ingress, and Argo Application.
 
 > **Important safety boundary:** the generated G-code controls a real cutting machine. A green web deployment does not validate machining safety. Every production acceptance run must include simulation, work-offset verification, Z-zero verification, an air cut, and a stepped depth test on scrap.
 
@@ -85,7 +89,7 @@ The application currently builds with Vite but did not yet have a production con
 - Reproducible Node/pnpm build and container image.
 - GHCR publishing and GitOps PR handoff.
 - Vault-backed private-image pull secret contract.
-- k3s Deployment, Service, Ingress, NetworkPolicy, and Argo Application.
+- k3s publisher Job, shared static-sites Service, Ingress, Vault wiring, and Argo Application.
 - Algorithm and codebase orientation for a new intern.
 - Tests, build validation, rendered-manifest validation, and post-deploy acceptance.
 
@@ -125,10 +129,9 @@ src/gcode/viewer.ts                interactive G-code visualizer
 src/lib/*test.ts                   algorithm and G-code contract tests
 testdata/MakeraBadge.nc            real MakeraStudio reference program
 gcode-tests*/                      generated test jobs and sidecar settings
-Dockerfile                         two-stage Vite build plus Nginx runtime
-nginx.conf                         health endpoint, fallback, and security headers
-deploy/gitops-targets.json         shared workflow's GitOps patch contract
-.github/workflows/publish-image.yaml  reusable release workflow caller
+Dockerfile.static                   static artifact image containing /site
+deploy/gitops-targets.json           shared workflow's static publisher patch contract
+.github/workflows/publish-static.yaml reusable release workflow caller
 ```
 
 The browser owns the mutable state. `AppState` in `src/main.ts` holds the loaded image, processed model, toolpaths, generated G-code, SVG, settings, and warnings. The processing pipeline is DOM-free, which is important: `scripts/generate-test-gcode.ts` can run the same core logic in Node for deterministic batch fixtures.
@@ -152,11 +155,13 @@ flowchart LR
     CI --> PR[GitOps PR]
     PR --> K3S[wesen/2026-03-27--hetzner-k3s]
     K3S --> ARGO[Argo CD Application cam]
-    ARGO --> POD[k3s Deployment + Nginx]
+    ARGO --> JOB[Publisher Job]
+    JOB --> PVC[Shared static-sites PVC]
+    PVC --> CADDY[Shared Caddy static-sites-host]
     DNS[Terraform wildcard *.yolo] --> TLS[Traefik + cert-manager]
-    TLS --> POD
+    TLS --> CADDY
     VAULT[Vault image-pull record] --> VSO[VSO]
-    VSO --> POD
+    VSO --> JOB
 ```
 
 The application can be understood as two pipelines joined at the artifact boundary:
@@ -426,54 +431,44 @@ A `Toolpath` contains a `kind`, `points`, optional constant `depth`, and `closed
 
 ## 5. Production delivery design
 
-### 5.1 Source image
+### 5.1 Source artifact
 
 The source repository now contains:
 
 ```text
-Dockerfile
-nginx.conf
+Dockerfile.static
 .dockerignore
-package.json                    packageManager: pnpm@10.13.1
-.github/workflows/publish-image.yaml
+package.json                       packageManager: pnpm@10.13.1
+.github/workflows/publish-static.yaml
 deploy/gitops-targets.json
 ```
 
-The Docker build has two stages. The build stage installs the locked pnpm dependency graph and runs `pnpm build`; the runtime stage copies only `dist/` into Nginx. Nginx exposes `/healthz`, serves static assets, falls back to `index.html`, and emits basic browser security headers.
+The CI test command runs the Vite build before Docker packaging. `Dockerfile.static` copies the resulting `dist/` directory to `/site` and verifies `/site/index.html`. It does not run Nginx, Caddy, `vite preview`, or Node in production. The image is an artifact carrier for the shared publisher Job.
 
-The package manager field is necessary for reproducibility. Without it, Corepack selected pnpm 11 in a clean container and the install failed on ignored dependency build scripts. With `pnpm@10.13.1`, the image build succeeds and the lockfile remains authoritative.
+The package manager field is necessary for reproducibility. Without it, Corepack selected pnpm 11 in a clean container and the install failed on ignored dependency build scripts. With `pnpm@10.13.1`, the build is deterministic and the lockfile remains authoritative.
 
-### 5.2 CI contract
+### 5.2 CI and GitOps handoff
 
-The caller invokes:
+The caller invokes `go-go-golems/infra-tooling/.github/workflows/publish-ghcr-image.yml@main` with `setup_go: false`, builds `dist/`, and publishes an immutable GHCR image. `deploy/gitops-targets.json` points to `gitops/kustomize/cam/publish-job.yaml`, container `publish`, and `patch_strategy: static-publisher-job`.
 
-```yaml
-uses: go-go-golems/infra-tooling/.github/workflows/publish-ghcr-image.yml@main
-```
+That strategy rewrites every `sha-*` token in the Kubernetes Job: its name, release label, image, and shell variable. A Job template is immutable, so changing only `image:` is not sufficient. The GitHub App mode uses the `cam-gitops-pr` Vault role and must not fall back to a PAT.
 
-It sets `setup_go: false` because this is a TypeScript application, and the test command installs the locked frontend dependencies before running Vitest. The reusable workflow still builds and pushes the Docker image, then patches the GitOps target using the generated immutable `sha-<7-character>` tag.
+### 5.3 Shared static-sites contract
 
-The GitHub App mode is required. The Vault role is `cam-gitops-pr`; its intended source repository claim is `go-go-golems/go-go-cam`, while the GitOps installation token is scoped to `wesen/2026-03-27--hetzner-k3s`. Do not use a PAT fallback.
-
-### 5.3 GitOps contract
-
-The cluster repository contains `gitops/kustomize/cam/` and `gitops/applications/cam.yaml`. The package has this wave layout:
+The cluster package is namespaced to the existing `static-sites` namespace and contains no CAM Deployment, Service, PVC, or per-site web server:
 
 | Wave | Resources |
 | ---: | --- |
-| -3 | Namespace |
-| -2 | ServiceAccount, VaultConnection, VaultAuth |
+| -2 | CAM ServiceAccount, uniquely named VaultConnection, VaultAuth |
 | -1 | VaultStaticSecret rendering `cam-ghcr-pull` |
-| 1 | Nginx Deployment |
-| 2 | Service, Ingress, NetworkPolicy |
+| 1 | Static publisher Job copying `/site` into the shared PVC |
+| 2 | Ingress routing `cam.yolo.scapegoat.dev` to `static-sites-host` |
 
-The image-pull Secret is a VSO projection of `kv/apps/cam/prod/image-pull`. The Kubernetes policy can read only that path. The static app has no other runtime secret and no persistent volume.
-
-The Deployment is non-root, read-only-root-filesystem, capability-dropped, and gives Nginx memory-backed writable mounts for its PID, cache, and temporary files. The NetworkPolicy admits HTTP only from Traefik and DNS egress only. Because the app is static, it needs no PostgreSQL, external API, or SMTP egress.
+The publisher writes `/srv/sites/cam.yolo.scapegoat.dev/releases/<sha>` and atomically updates `current`. The existing Caddy `static-sites-host` serves `/srv/sites/{host}/current` and supplies the client-side fallback to `index.html`. The image-pull Secret is a VSO projection of `kv/apps/cam/prod/image-pull`; the CAM workload has no runtime secret.
 
 ### 5.4 DNS and TLS
 
-`cam.yolo.scapegoat.dev` is covered by the existing `*.yolo.scapegoat.dev` A record in `terraform/dns/zones/scapegoat-dev/envs/prod/main.tf`, pointing to `91.98.46.169`. Confirm this remains true before rollout; do not add a duplicate record if the wildcard still covers the hostname. cert-manager requests `cam-tls` through the `letsencrypt-prod` ClusterIssuer, and Traefik serves the HTTPS Ingress.
+`cam.yolo.scapegoat.dev` is covered by the existing `*.yolo.scapegoat.dev` A record in `terraform/dns/zones/scapegoat-dev/envs/prod/main.tf`, pointing to `91.98.46.169`. Confirm this remains true before rollout; do not add a duplicate record if the wildcard still covers the hostname. cert-manager requests `cam-tls` through the `letsencrypt-prod` ClusterIssuer, and Traefik routes HTTPS to the shared Caddy Service.
 
 ## 6. Deployment runbook
 
@@ -485,24 +480,22 @@ Run from the source repository:
 pnpm install --frozen-lockfile
 pnpm test
 pnpm build
-docker build -t cam:local .
-docker run --rm -p 8080:80 cam:local
-curl -fsS http://127.0.0.1:8080/healthz
+test -f dist/index.html
+docker build -f Dockerfile.static -t cam:static .
+docker run --rm --entrypoint sh cam:static -c 'test -f /site/index.html'
 ```
 
-Open `http://127.0.0.1:8080`, load the embedded cat sample, choose each pocket strategy, generate G-code, inspect the visualizer, and download the `.nc` file. The output must remain a browser download; the server must never receive artwork.
+Open the site through any local static server, load the embedded cat sample, choose each pocket strategy, generate G-code, inspect the visualizer, and download the `.nc` file. The output must remain a browser download; the server must never receive artwork.
 
 ### Phase 1: GitHub and Vault prerequisites
 
 The GitHub repository is `go-go-golems/go-go-cam`. Before enabling the first push workflow:
 
-1. Confirm the repository's package publishing permission allows `GITHUB_TOKEN` to publish GHCR.
+1. Confirm `GITHUB_TOKEN` can publish the GHCR package.
 2. Create or verify the `cam-gitops-pr` GitHub Actions Vault role and policy.
-3. Seed `kv/ci/github/cam/gitops-pr-app` with the approved GitHub App `app_id` and `private_key` without printing the values.
+3. Seed `kv/ci/github/cam/gitops-pr-app` with the approved GitHub App `app_id` and `private_key` without printing values.
 4. Seed `kv/apps/cam/prod/image-pull` if GHCR is private. Its contract is `server`, `username`, `password`, and base64 `auth`.
-5. Apply the Kubernetes Vault policy and role from `vault/policies/kubernetes/cam.hcl` and `vault/roles/kubernetes/cam.json`.
-
-The policy and role files are durable declarations; `scripts/bootstrap-vault-*-auth.sh` applies them. A file in Git does not create the live Vault object until the bootstrap script is run.
+5. Apply the Kubernetes Vault policy and role from `vault/policies/kubernetes/cam.hcl` and `vault/roles/kubernetes/cam.json`. The role is bound to ServiceAccount `cam` in namespace `static-sites`.
 
 ### Phase 2: Source release
 
@@ -510,15 +503,15 @@ The policy and role files are durable declarations; `scripts/bootstrap-vault-*-a
 git push origin main
 ```
 
-Verify the new workflow run starts. A pull-request run must test and build but not push an image or open a GitOps PR. A `main` push must:
+A pull-request run must test and build but not push an image or open a GitOps PR. A `main` push must:
 
-- run `pnpm install --frozen-lockfile && pnpm test`;
-- build the Nginx image;
+- run `pnpm install --frozen-lockfile && pnpm test && pnpm build`;
+- package the resulting `dist/` tree under `/site`;
 - publish `ghcr.io/go-go-golems/go-go-cam:sha-<sha>`;
-- authenticate to Vault using the `cam-gitops-pr` role;
+- authenticate to Vault using `cam-gitops-pr`;
 - open a GitOps PR against `wesen/2026-03-27--hetzner-k3s`.
 
-Inspect the PR actor, not the commit author. GitHub App mode should show the GitOps app actor. The workflow hardcodes the commit author to `github-actions[bot]` in all modes.
+Inspect the PR actor, not the commit author. GitHub App mode should show the GitOps app actor.
 
 ### Phase 3: GitOps validation and first bootstrap
 
@@ -531,40 +524,41 @@ kubectl kustomize gitops/kustomize/cam >/tmp/cam.yaml
 kubectl apply --dry-run=client -f /tmp/cam.yaml
 ```
 
-Merge the GitOps PR after reviewing the immutable image pin. A new Application is not automatically created merely because `gitops/applications/cam.yaml` is in Git. On the first install, apply the AppProject and Application explicitly:
+The placeholder `sha-0000000` in `publish-job.yaml` must be replaced by the first GitOps PR before the Application can publish a real image. Merge the PR after checking that the image exists and the release tokens agree.
+
+A new Application is not automatically created merely because `gitops/applications/cam.yaml` is in Git. On the first install, apply it explicitly:
 
 ```bash
 export KUBECONFIG=$PWD/kubeconfig-<tailscale-host>.yaml
-kubectl apply -f gitops/projects/prod-apps.yaml
 kubectl apply -f gitops/applications/cam.yaml
 kubectl -n argocd annotate application cam argocd.argoproj.io/refresh=hard --overwrite
 ```
 
-Later image updates use the existing Application and require only the reviewed GitOps PR merge.
+The existing `static-sites` AppProject already authorizes the `static-sites` namespace. Later image updates use the existing Application and require only the reviewed GitOps PR merge.
 
-### Phase 4: cluster and browser acceptance
+### Phase 4: static-site acceptance
 
 ```bash
 kubectl -n argocd get application cam
-kubectl -n cam get pod,service,ingress,secret
-kubectl -n cam describe certificate cam-tls
-kubectl -n cam rollout status deployment/cam --timeout=180s
-curl -fsS https://cam.yolo.scapegoat.dev/healthz
+kubectl -n static-sites get job,pod,ingress,certificate,vaultauth,vaultstaticsecret,secret
+kubectl -n static-sites logs job/publish-cam-<release>
+kubectl -n static-sites describe certificate cam-tls
+curl -fsSI https://cam.yolo.scapegoat.dev/
 curl -fsS https://cam.yolo.scapegoat.dev/ | head
 ```
 
-The expected state is `Synced/Healthy`, one Ready pod, a `kubernetes.io/dockerconfigjson` pull Secret if GHCR is private, a Ready certificate, and HTTPS content from the generated Vite bundle.
+The expected state is `Synced/Healthy`, a completed publisher Job, a Ready pull Secret when GHCR is private, a Ready certificate, and HTTPS content from the generated Vite bundle.
 
 Then perform browser acceptance:
 
 - Load the application over HTTPS with no console errors.
 - Load the embedded cat sample.
-- Upload PNG, JPEG, WebP, and BMP fixtures where supported.
+- Upload supported image fixtures.
 - Exercise Otsu, manual threshold, inversion, crop, and cleanup controls.
 - Generate raster, contour, and Fermat pockets.
 - Exercise optional flat clearing and cutout passes.
 - Download G-code, SVG, and mask PNG.
-- Load generated G-code and a fixture `.nc` file in the visualizer.
+- Load generated G-code and fixture `.nc` files in the visualizer.
 - Confirm toolpath summaries, bounds, depth coloring, tool markers, spindle events, and progress slider.
 - Verify that the server sees no artwork upload; all processing remains local.
 
@@ -601,7 +595,7 @@ Use these checks at each boundary:
 | Boundary | Evidence |
 | --- | --- |
 | TypeScript | `pnpm test`, `pnpm build` |
-| Container | `docker build`, local `/healthz`, non-root runtime |
+| Artifact image | `docker build -f Dockerfile.static`, `/site/index.html`, manifest inspection |
 | GHCR | immutable image exists for the commit SHA |
 | GitOps | `validate_gitops.sh`, Kustomize render, dry-run |
 | Vault | role/policy applied, VSO Ready, pull Secret key present without decoding it |
@@ -615,8 +609,8 @@ Use these checks at each boundary:
 - A browser smoke test using Playwright against the built static server.
 - A fixture-based pipeline test that asserts the generated G-code parses and has bounded Z depth.
 - A CSP test that loads the app and asserts no blocked required resource.
-- A container test that starts as UID 101 and serves `/healthz`.
-- A manifest test that asserts the image, host, namespace, and Service selector agree.
+- An artifact-image test that asserts `/site/index.html` and excludes non-public files.
+- A publisher-manifest test that asserts the image, host, release tokens, shared PVC, and Ingress agree.
 - Golden SVG/G-code snapshots for the cat sample and each test-pattern family.
 - A property test that every emitted cutting point lies in the intended mask or legal center region, within the documented raster tolerance.
 
@@ -631,13 +625,13 @@ Use these checks at each boundary:
 - **Consequences:** large images consume browser CPU/memory; processing cannot be centrally audited; users must download and validate G-code themselves.
 - **Status:** accepted.
 
-### Decision: Nginx static container rather than a Node runtime
+### Decision: shared static-sites publisher instead of a per-site server
 
-- **Context:** Vite emits static assets and there is no runtime API.
-- **Options considered:** Node `vite preview`; Node/Express server; Nginx.
-- **Decision:** multi-stage build with Nginx runtime.
-- **Rationale:** smaller runtime responsibility, conventional static serving, explicit health endpoint, and no development server in production.
-- **Consequences:** any future server API requires a separate service or runtime design; Nginx UID and writable paths must remain compatible with the pod security context.
+- **Context:** Vite emits static assets and the k3s platform already has a shared Caddy host backed by a static-sites PVC.
+- **Options considered:** per-site Nginx Deployment; Node `vite preview`; shared static-sites publisher Job.
+- **Decision:** package `/site` in GHCR and publish it with the shared static-sites Job.
+- **Rationale:** fewer workloads, one serving implementation, atomic release directories, and an existing platform contract already used by other Vite/Storybook sites.
+- **Consequences:** the site depends on the shared PVC/Caddy service and its namespace; a future backend requires a separate application deployment.
 - **Status:** accepted.
 
 ### Decision: GHCR plus GitOps image handoff
@@ -692,7 +686,7 @@ Use these checks at each boundary:
 ### Alternatives
 
 - **Cloudflare Pages:** simpler static hosting, but bypasses the requested k3s/Argo platform and the existing release train.
-- **Shared static-sites host:** avoids one Deployment per app, but couples this application to a content host and makes the image/GitOps contract less direct.
+- **Per-site Nginx Deployment:** rejected because the cluster already provides a shared Caddy/PVC publisher model for static sites.
 - **Public GHCR package:** removes the pull Secret, but changes package visibility and access policy; use only with explicit approval.
 - **Exact Euclidean distance transform:** potentially improves geometry, but is an algorithm change outside this deployment ticket.
 - **Server-side CAM worker:** could provide queueing and heavier processing, but would require authentication, uploads, persistence, and a new threat model.
@@ -700,10 +694,11 @@ Use these checks at each boundary:
 ### Open questions
 
 1. Should the GHCR package remain public, or should `kv/apps/cam/prod/image-pull` be seeded and retained?
-2. Should the reusable workflow ref move from `@main` to a reviewed commit after the first successful rollout?
-3. What exact Makera machine profile and sender version are the acceptance targets for G-code?
-4. Should the UI eventually expose a machine profile instead of hard-coding Makera metadata defaults?
-5. Should a future ticket replace chamfer distance with exact EDT and add property-based geometry bounds tests?
+2. Should the shared static-sites host expose a per-site cache policy or security-header configuration?
+3. Should the reusable workflow ref move from `@main` to a reviewed commit after the first successful rollout?
+4. What exact Makera machine profile and sender version are the acceptance targets for G-code?
+5. Should the UI eventually expose a machine profile instead of hard-coding Makera metadata defaults?
+6. Should a future ticket replace chamfer distance with exact EDT and add property-based geometry bounds tests?
 
 ## 10. References and file index
 
@@ -724,13 +719,13 @@ Use these checks at each boundary:
 
 ### Deployment files
 
-- `/home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/Dockerfile`
-- `/home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/nginx.conf`
-- `/home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/.github/workflows/publish-image.yaml`
+- `/home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/Dockerfile.static`
+- `/home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/.github/workflows/publish-static.yaml`
 - `/home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/deploy/gitops-targets.json`
 - `/home/manuel/code/wesen/2026-03-27--hetzner-k3s/gitops/kustomize/cam/`
+- `/home/manuel/code/wesen/2026-03-27--hetzner-k3s/gitops/kustomize/static-sites-host/`
 - `/home/manuel/code/wesen/2026-03-27--hetzner-k3s/gitops/applications/cam.yaml`
-- `/home/manuel/code/wesen/2026-03-27--hetzner-k3s/gitops/projects/prod-apps.yaml`
+- `/home/manuel/code/wesen/2026-03-27--hetzner-k3s/gitops/projects/static-sites.yaml`
 - `/home/manuel/code/wesen/2026-03-27--hetzner-k3s/vault/policies/kubernetes/cam.hcl`
 - `/home/manuel/code/wesen/2026-03-27--hetzner-k3s/vault/roles/kubernetes/cam.json`
 - `/home/manuel/code/wesen/2026-03-27--hetzner-k3s/vault/policies/github-actions/cam-gitops-pr.hcl`

@@ -18,8 +18,6 @@ RelatedFiles:
       Note: Cluster-side desired state
     - Path: abs:///home/manuel/code/wesen/terraform/vault/github-actions/envs/k3s/main.tf
       Note: Terraform GitHub Actions role authority
-    - Path: repo://Dockerfile
-      Note: Container implementation and clean-build failure/fix
     - Path: repo://src/lib/fermat.ts
       Note: Implementation evidence for Fermat-style path planning
     - Path: repo://ttmp/2026/08/01/MILL-05--production-deployment-of-abs-bicolor-v-engraver-to-cam-yolo-scapegoat-dev/sources/01-connected-fermat-spirals-project.md
@@ -38,6 +36,7 @@ LastUpdated: 2026-08-01T14:35:00-04:00
 WhatFor: Continue or review the production deployment work without reconstructing the investigation.
 WhenToUse: Read before resuming MILL-05 or changing its deployment and algorithm contracts.
 ---
+
 
 
 # Investigation Diary
@@ -445,3 +444,106 @@ The cluster checkout had unrelated work on its original hotfix branch. To avoid 
 - GitOps validation: `kubectl kustomize gitops/kustomize/cam`, `kubectl apply --dry-run=client`, `bash scripts/validate_gitops.sh`.
 - Documentation validation: `docmgr doctor --ticket MILL-05 --stale-after 30`.
 - Remaining live evidence: Vault readiness, GitHub Actions run, GitOps PR, Argo `Synced/Healthy`, TLS, browser acceptance, and CNC simulation/air-cut/depth test.
+
+## Step 5: Refactor CAM onto the shared Vite static-sites pipeline
+
+The deployment design was corrected after tracing the infrastructure MOC to the existing static-sites playbook and inspecting the live `static-sites-host` pattern. The earlier per-application Nginx Deployment was unnecessary and did not match the platform. CAM now follows the same contract as the existing Vite/Storybook static sites: CI builds `dist/`, the artifact image contains `/site`, a GitOps PR patches a publisher Job, and the shared Caddy host serves the release from the static-sites PVC.
+
+This is a simplification, not a feature reduction. It removes a dedicated web server, Service, PVC, NetworkPolicy, namespace, and per-site runtime health endpoint from CAM. The site remains entirely browser-side; the cluster serves only immutable files.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Replace the initial bespoke Nginx deployment with the existing shared static-sites publisher architecture, and make the design/documentation match the platform's established Vite static-site procedure.
+
+**Inferred user intent:** Avoid inventing a second hosting stack when a tested, reusable static-site pipeline already exists in the infrastructure repository.
+
+**Commit (code):** `9c7aff758e46e1d3fc251e92ea43df54` — "Use shared static site publisher deployment"; `f0b538e64d3345339cc98f6df982927f8ad5792d` — "Refactor CAM to shared static sites publisher".
+
+### What I did
+
+- Replaced `Dockerfile` plus Nginx runtime with `Dockerfile.static`, which copies `dist/` to `/site` and verifies `index.html`.
+- Removed `nginx.conf` and the obsolete per-app web-server workflow.
+- Renamed the source workflow to `.github/workflows/publish-static.yaml`.
+- Changed `deploy/gitops-targets.json` to target `publish-job.yaml` with `patch_strategy: static-publisher-job`.
+- Replaced the CAM k3s Deployment, Service, Namespace, and NetworkPolicy with the shared static-sites package pattern.
+- Added the publisher Job that copies `/site` to `/srv/sites/cam.yolo.scapegoat.dev/releases/<sha>` and updates `current`.
+- Changed the Argo Application to the existing `static-sites` AppProject and namespace.
+- Renamed the CAM VaultConnection to `cam-vault` to avoid shared-resource ownership collisions.
+- Rebound the CAM Kubernetes Vault role to ServiceAccount `cam` in namespace `static-sites`.
+- Added the Vite static-site playbook and linked it from the infrastructure-and-release MOC in commit `d8d7bb15066e2e021f376b3a2f0f79ed7c63d9f1`.
+
+### Why
+
+- The cluster already has one shared Caddy static host, shared PVC, and a proven publisher Job contract.
+- Kubernetes Jobs need all release tokens updated together because their pod templates are immutable.
+- The source image is an artifact carrier, not a runtime server; this matches the actual ownership boundary and reduces operational surface area.
+
+### What worked
+
+- `pnpm test`: 2 files passed, 18 tests passed.
+- `pnpm build`: TypeScript and Vite production build passed.
+- `docker build -f Dockerfile.static -t cam:static-mill-05 .` passed.
+- The image inspection proved `/site/index.html` and the generated assets exist.
+- `validate_gitops_targets.py` reported:
+
+  ```text
+  deploy/gitops-targets.json: OK (1 target(s))
+  ```
+
+- The rendered CAM package accepted dry-run validation as a ServiceAccount, Job, Ingress, VaultAuth, VaultConnection, and VaultStaticSecret.
+- The full k3s validator passed with 51 packages and 0 violations.
+
+### What didn't work
+
+- The earlier Nginx container path was wrong for this platform and also exposed a non-root port/filesystem debugging problem. It was removed rather than patched around.
+- The source repository's `dist/` directory is ignored by Git, so local Docker packaging requires `pnpm build` before `docker build`; the CI test command now enforces that order.
+
+### What I learned
+
+- The correct static-site invariant is `/site/index.html` in an immutable image, not “a container that listens on port 80”.
+- The shared host owns serving concerns: Caddy fallback, shared PVC layout, and hostname-based routing. A new site owns only its artifact, publisher Job, Vault pull wiring, and Ingress.
+- The static-sites AppProject already authorizes the namespace, so CAM does not need a new AppProject destination.
+
+### What was tricky to build
+
+- The initial implementation had spread deployment assumptions through the ticket, source files, and cluster package. Refactoring required changing the image contract, GitOps patch target, namespace/project, Job layout, Vault role binding, and validation commands consistently.
+- The `static-publisher-job` strategy is load-bearing: the release SHA appears in the Job name, label, image, and shell variable. Leaving any one occurrence stale would make a release non-reproducible or leave Argo unable to replace the immutable Job.
+
+### What warrants a second pair of eyes
+
+- Confirm the static-site publisher Job's shared PVC access and the live Caddy path for `cam.yolo.scapegoat.dev`.
+- Confirm `cam-ghcr-pull` is seeded and Ready if the GHCR package is private.
+- Confirm the first GitOps PR replaces `sha-0000000` before the Argo Application is bootstrapped.
+- Confirm the Vite output uses root-relative asset URLs compatible with the shared host.
+
+### What should be done in the future
+
+- Push the source and dedicated k3s branch through their normal review paths.
+- Seed the CI and image-pull Vault paths without printing credential values.
+- Bootstrap the Argo Application and verify the completed publisher Job, certificate, and public HTTPS response.
+- Mark the deployment and validation tasks complete only after live evidence exists.
+
+### Code review instructions
+
+- Review source commit `9c7aff7` and cluster commit `f0b538e` after the prior source/cluster commits.
+- Start with `Dockerfile.static`, `.github/workflows/publish-static.yaml`, `deploy/gitops-targets.json`, `gitops/kustomize/cam/publish-job.yaml`, and `gitops/applications/cam.yaml`.
+- Run:
+
+  ```bash
+  pnpm test
+  pnpm build
+  docker build -f Dockerfile.static -t cam:review .
+  python3 /home/manuel/code/wesen/go-go-golems/infra-tooling/scripts/gitops/validate_gitops_targets.py deploy/gitops-targets.json
+  ```
+
+- From the k3s repository, run `kubectl kustomize gitops/kustomize/cam` and `bash scripts/validate_gitops.sh`.
+
+### Technical details
+
+- Source artifact: `ghcr.io/go-go-golems/go-go-cam:sha-<7-char-commit>` containing `/site`.
+- Static release path: `/srv/sites/cam.yolo.scapegoat.dev/releases/<sha>`.
+- Active release link: `/srv/sites/cam.yolo.scapegoat.dev/current`.
+- Shared service: `static-sites-host` on port `80`.
+- Public URL: `https://cam.yolo.scapegoat.dev`.
