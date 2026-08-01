@@ -14,9 +14,13 @@ RelatedFiles:
     - Path: repo://index.html
       Note: Square-frame and bridge UI controls (commit 24263b0)
     - Path: repo://src/lib/cutout.test.ts
-      Note: Geometry, mirroring, span, and guard regression tests (commit 801096a)
+      Note: |-
+        Geometry, mirroring, span, and guard regression tests (commit 801096a)
+        Uniform/per-side margin, radius, and bridge geometry tests (commit 907fa39)
     - Path: repo://src/lib/cutout.ts
-      Note: Pure square frame and bridge-pass geometry implementation (commit 801096a)
+      Note: |-
+        Pure square frame and bridge-pass geometry implementation (commit 801096a)
+        Rounded frame, selectable margins, chorded corners, and bridge clearance (commit 907fa39)
     - Path: repo://src/lib/operations.ts
       Note: |-
         Depth-ladder and G-code emission contract to generalize
@@ -43,6 +47,8 @@ RelatedFiles:
         Bridge setting parsing and operator warning (commit 24263b0)
     - Path: repo://testdata/MakeraBadge.nc
       Note: Primary G-code evidence for the four ramped holding bridges
+    - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-frame-margins.png
+      Note: Rendered per-side margin and corner-radius UI evidence
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-preview.png
       Note: Built UI visual smoke-test artifact
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-settings-transfer.png
@@ -52,11 +58,12 @@ RelatedFiles:
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/scripts/01-analyze-makera-contour-bridges.py
       Note: Reproducible modal-motion bridge analysis
 ExternalSources: []
-Summary: Evidence-backed implementation guide for replacing the artwork-profile cutout with a square frame and Makera-style four holding bridges.
+Summary: Evidence-backed implementation guide for replacing the artwork-profile cutout with a rounded frame, selectable uniform/per-side margins, and Makera-style four holding bridges.
 LastUpdated: 2026-08-01T20:20:00-04:00
-WhatFor: Enable an intern to safely implement and validate a square final cutout with bridge ramps in the ABS Bicolor V-Engraver.
+WhatFor: Enable an intern to safely implement and validate a rounded final frame cutout with selectable margins and bridge ramps in the ABS Bicolor V-Engraver.
 WhenToUse: Read before changing cutout settings, geometry planning, G-code emission, generated fixtures, or CNC validation.
 ---
+
 
 
 
@@ -75,9 +82,9 @@ The work is deliberately split into a pure geometry planner, a small operation-e
 
 ## Implementation status (2026-08-01)
 
-The documented software change is implemented. `src/lib/cutout.ts` plans the frame and pass-proportional bridges; `src/lib/operations.ts` emits pass-specific pointwise-depth contour routes; `src/lib/pipeline.ts` schedules `[T1]Square Frame Cutout`; and `index.html`/`src/main.ts` expose physical bridge settings and warning text. The code was committed as `801096a` and `24263b0`, with diary commits `07809c8` and `42fa44e`.
+The documented software change is implemented. `src/lib/cutout.ts` plans a rounded frame and pass-proportional bridges; `src/lib/operations.ts` emits pass-specific pointwise-depth contour routes; `src/lib/pipeline.ts` schedules `[T1]Frame Cutout`; and `index.html`/`src/main.ts` expose physical bridge, margin-mode, per-side-margin, and corner-radius settings. Commits `801096a` and `24263b0` implemented the original frame; `907fa39` added selectable uniform/per-side margins and a 3mm default radius.
 
-Software evidence is green: `pnpm test` passes 5 files / 28 tests, `pnpm build` passes, parser-backed integration tests find the named final toolpath and simultaneous XY/Z bridge ramps, and a built-browser smoke test generated the cat-sample job with the square cutout enabled. The production preview is available on the LAN at `http://192.168.0.39:4173/` while its preview process runs. Physical CNC validation remains required: run a simulator, air cut, and sacrificial-stock cut before using the output on a production workpiece.
+Software evidence is green: `pnpm test` passes 5 files / 29 tests, `pnpm build` passes, parser-backed integration tests find the named final toolpath and simultaneous XY/Z bridge ramps, and a built-browser smoke test generated the cat-sample job with individual margins and rounded corners. The production preview is available on the LAN at `http://192.168.0.39:4173/` while its preview process runs. Physical CNC validation remains required: run a simulator, air cut, and sacrificial-stock cut before using the output on a production workpiece.
 
 The browser also provides versioned Copy settings/Paste settings JSON, a textarea fallback for HTTP clipboard restrictions, and automatic localStorage persistence keyed by image content. Reopening the same image restores its saved settings; this was implemented in commit `f74bfca` and verified in the built browser by copying/pasting a 123.4mm width, reloading the cat sample, and observing that width restore.
 

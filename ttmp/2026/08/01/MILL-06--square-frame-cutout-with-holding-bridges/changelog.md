@@ -74,3 +74,13 @@ Added versioned copy/paste settings and image-content localStorage restoration, 
 - /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/lib/settings-transfer.test.ts — Transfer tests
 - /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/main.ts — Browser transfer and restore behavior
 
+
+## 2026-08-01
+
+Added rounded frame corners and selectable uniform/per-side margins with planner, UI, test, and browser evidence (commit 907fa39).
+
+### Related Files
+
+- /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/lib/cutout.ts — Rounded frame planner
+- /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/main.ts — Margin-mode control wiring
+

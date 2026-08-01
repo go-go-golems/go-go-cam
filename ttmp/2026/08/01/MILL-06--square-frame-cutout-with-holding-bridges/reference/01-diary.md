@@ -14,7 +14,9 @@ RelatedFiles:
     - Path: repo://src/lib/cutout.test.ts
       Note: Step 8 verification evidence (commit 801096a)
     - Path: repo://src/lib/cutout.ts
-      Note: Step 8 pure planner implementation (commit 801096a)
+      Note: |-
+        Step 8 pure planner implementation (commit 801096a)
+        Step 13 rounded geometry implementation (commit 907fa39)
     - Path: repo://src/lib/operations.ts
       Note: Step 9 writer implementation (commit 24263b0)
     - Path: repo://src/lib/pipeline.test.ts
@@ -27,6 +29,8 @@ RelatedFiles:
       Note: Primary evidence inspected chronologically
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/design-doc/01-square-frame-cutout-with-holding-bridges-analysis-design-and-implementation-guide.md
       Note: Detailed evidence-backed design recorded by the diary
+    - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-frame-margins.png
+      Note: Step 13 browser verification
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-preview.png
       Note: Step 10 initial browser smoke-test screenshot
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-settings-transfer.png
@@ -41,6 +45,7 @@ LastUpdated: 2026-08-01T20:09:00-04:00
 WhatFor: Preserve the research trail and implementation review guidance for MILL-06.
 WhenToUse: Read before continuing ticket research or implementing the proposed cutout.
 ---
+
 
 
 
@@ -736,3 +741,68 @@ The implementation deliberately indexes by image data rather than filename. Rena
 - Transfer envelope: `{ format: "abs-bicolor-v-engraver/settings", version: 1, settings: { ... } }`.
 - Storage namespace: `abs-bicolor-v-engraver/image-settings/v1/<content-fingerprint>`.
 - Browser smoke result: 123.4 copied/pasted/restored for the cat-sample data URL; LAN server remained HTTP 200.
+
+## Step 13: Add rounded corners and selectable uniform or per-side frame margins
+
+I generalized the final contour from a square-only route to a rounded frame. Uniform mode now applies the chosen finished margin exactly on all four sides; turning that mode off exposes independent top, right, bottom, and left margins. The planner offsets every requested finished margin by the flat-tool radius, then emits chorded quarter-circle corners at a configurable 3mm default radius while retaining the four Makera-style bridges on straight side midpoints.
+
+This supersedes the earlier square-only interpretation because independent physical margins cannot in general describe a square. The operation is now named `[T1]Frame Cutout`, making its geometry honest for both uniform rectangular and asymmetric four-side configurations. Existing bridge behavior, operation order, and pointwise-depth emission remain unchanged.
+
+### Prompt Context
+
+**User prompt (verbatim):** "allow adjusting margins all around, or toggle with one margin for all sides. also add corner radius to have rounded corner per default,
+
+[REMINDER] Output a <summary>...</summary> block at the VERY END of your response. This is mandatory."
+
+**Assistant interpretation:** Add a UI toggle between one equal physical margin and four independent margins, then generate rounded T1 frame corners with a useful default radius.
+
+**Inferred user intent:** Fit cutouts tightly and deliberately around varied artwork/workholding needs while retaining a visually and mechanically gentler default corner shape.
+
+**Commit (code):** 907fa39112849ffe163d0bd1047b703386f04e64 — "Feat: customize rounded frame margins"
+
+### What I did
+- Added uniform-margin toggle, top/right/bottom/left controls, and a 3mm default corner-radius control in `index.html`/`src/main.ts`.
+- Disabled the inactive margin mode so a uniform value cannot be confused with active per-side values (and vice versa).
+- Added the new settings to the versioned settings-transfer schema and content-storage namespace (`v2`), intentionally refusing incomplete old payloads rather than silently guessing new margins/radius.
+- Replaced `planSquareFrameCutout` with `planFrameCutout`, which computes tool-center margins in machine space and chords each quarter-circle into six linear segments for the G1-only generator.
+- Retained one bridge at the midpoint of each straight side and validates both corner radius and bridge span against the shortest remaining straight segment.
+- Updated pipeline operation name/status, auto-crop margin padding, batch defaults, and parser-backed integration expectations.
+- Added geometry tests for exact uniform margins, asymmetrical individual margins, rounding, mirrored coordinate transforms, oversized bridge span, and oversized radius.
+- Ran `pnpm test && pnpm build`: 5 test files / 29 tests passed and production build passed.
+- Browser-tested default 3mm radius, uniform-mode-disabled side fields, individual-mode-enabled side fields, four independent values, a generated `[T1]Frame Cutout`, and rounded-frame safety warning. Captured `images/ui-frame-margins.png`.
+
+### Why
+- A uniform margin must be exactly uniform around the artwork; retaining the former square expansion would silently leave larger margins on a short axis.
+- The current generator emits linear G-code, so rounded corners must be represented by controlled chord segments rather than unsupported arc commands.
+
+### What worked
+- In browser state, initial controls reported `uniform: true`, disabled individual fields, and radius `3`; toggling individual mode enabled all four side fields.
+- The browser successfully generated 1,270 toolpaths after setting top=3, right=2, bottom=2, left=1, radius=3, and enabling the frame operation.
+- DOM evidence confirms `[T1]Frame Cutout` and the rounded-frame holding-bridge warning; visual review found no overlap, clipping, or error state.
+
+### What didn't work
+- Initial test assumptions still expected five sharp-corner points and the old square operation name. The rounded route correctly contains linearized corner points, so I changed the assertion to require more than five points and updated the operation expectation.
+- An initial radius=8 guard test failed with `Bridge span is too wide for the frame after corner clearance.` The radius was geometrically valid but left too little straight bridge space. I changed the radius test to 14, which exceeds half the frame height and exercises the intended radius guard.
+- The earlier settings-transfer payload lacked the newly required fields. I bumped both transfer and image-storage namespaces to v2 rather than silently applying incomplete settings.
+
+### What I learned
+- Bridge span must be constrained against the shortest **straight** side (`min(frameWidth, frameHeight) - 2 * cornerRadius`), not just the outer frame dimensions.
+- A six-chord quarter circle makes rounded corners visible while preserving the project’s proven G1-only Makera style and per-point depth profile.
+
+### What was tricky to build
+- The planner has to interleave straight bridge segments and rounded corner chords while preserving a closed endpoint for direct ladder re-plunges. I start at the bottom-left tangent point, add a bridged straight side, append a deterministic quarter arc, and repeat four times; the last arc returns exactly to the starting tangent point.
+
+### What warrants a second pair of eyes
+- Confirm that six chords per quarter are smooth enough for the target tool/material and that the 3mm default radius is appropriate for the smallest expected frame; the planner deliberately rejects radii or spans that cannot coexist safely.
+
+### What should be done in the future
+- If machine/controller support for arcs is later required, add an explicit, tested G2/G3 emission strategy rather than changing the current chorded G1 contract opportunistically.
+
+### Code review instructions
+- Review `src/lib/cutout.ts`’s `appendFramePath`, margin selection, and shortest-straight-side guard first.
+- Run `pnpm test && pnpm build`, then visit the LAN preview, toggle uniform mode, set four margins/radius, and process a sample.
+
+### Technical details
+- Uniform mode tool-center clearance per side = `cutoutMargin + flatDiameter / 2`; individual mode uses each side’s margin plus the same radius.
+- Default `cutoutCornerRadius=3`; zero is supported for deliberate sharp corners.
+- Settings transfer/storage changed from v1 to v2 because the frame setting set gained six required fields.

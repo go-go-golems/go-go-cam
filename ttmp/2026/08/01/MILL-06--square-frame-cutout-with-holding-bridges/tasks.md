@@ -18,3 +18,4 @@
 - [x] Wire square-frame bridge settings into UI, pipeline, batch defaults, and warnings. <!-- t:cagk -->
 - [x] Run structural G-code analysis, browser UI inspection, test/build, and update ticket documentation/delivery. <!-- t:3ond -->
 - [x] Add copy/paste settings transfer and image-indexed localStorage restoration with tests and browser verification. <!-- t:76fm -->
+- [x] Add rounded frame corners and selectable uniform or per-side margins, with geometry/UI/browser verification. <!-- t:nqo2 -->
