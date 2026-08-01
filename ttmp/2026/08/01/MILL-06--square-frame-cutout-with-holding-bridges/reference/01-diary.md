@@ -25,6 +25,10 @@ RelatedFiles:
       Note: Primary evidence inspected chronologically
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/design-doc/01-square-frame-cutout-with-holding-bridges-analysis-design-and-implementation-guide.md
       Note: Detailed evidence-backed design recorded by the diary
+    - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-preview.png
+      Note: Step 10 initial browser smoke-test screenshot
+    - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-square-frame-generated.png
+      Note: Step 10 generated-job browser screenshot
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/scripts/01-analyze-makera-contour-bridges.py
       Note: Ticket-local script and recorded initial modal-coordinate fix
 ExternalSources: []
@@ -33,6 +37,7 @@ LastUpdated: 2026-08-01T20:09:00-04:00
 WhatFor: Preserve the research trail and implementation review guidance for MILL-06.
 WhenToUse: Read before continuing ticket research or implementing the proposed cutout.
 ---
+
 
 
 
@@ -548,3 +553,116 @@ The implementation retains current behavior where it is not intentionally change
 ### Technical details
 - `pathsByPass` is optional, so all pre-existing operations retain their old shared-route behavior.
 - The first cutout pass is `Toolpath.depth=0.5`; bridge routes explicitly carry positive depths per point and the writer converts them to negative surface-relative G-code Z.
+
+## Step 10: Smoke-test the built UI and expose the production preview on the LAN
+
+I built the production bundle, started Vite preview on all network interfaces, and verified both loopback and the primary LAN address return the built site. I then used a separate headless Chrome/CDP browser session to enable the square-frame checkbox on the built-in cat sample, generate G-code, inspect DOM state, and capture rendered artifacts. This proves the browser-facing settings reach the working pipeline rather than only compiling in unit tests.
+
+The generated UI reported 1,365 toolpaths and 32,175 G-code lines. DOM inspection confirmed an enabled cutout, a final square-frame operation in the preview, and the safety warning with 0.80mm retained bridge material. Visual inspection found no broken layout, clipping, or visible error state; the G-code visualizer correctly remains unloaded until its dedicated “View generated G-code” button is selected.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 7)
+
+**Assistant interpretation:** Verify the implemented UI in a browser and keep the finished site reachable from another machine on the local network.
+
+**Inferred user intent:** Obtain practical evidence that the implementation works end-to-end and a usable LAN URL for review without needing local source tooling.
+
+### What I did
+- Ran `pnpm test && pnpm build`; final results were 4 Vitest files / 25 tests passed and successful Vite build.
+- Started `pnpm preview --host 0.0.0.0 --port 4173` as persistent PID `1617728`.
+- Verified `http://127.0.0.1:4173/` and `http://192.168.0.39:4173/` both returned HTTP 200 with a 15,811-byte document.
+- Captured initial rendered UI artifact at `images/ui-preview.png` and generated-job artifact at `images/ui-square-frame-generated.png`.
+- In a CDP browser session, checked `cutoutEnable`, invoked the Process button, waited for the successful generated status, inspected warning text/G-code preview, and captured a full-page PNG.
+
+### Why
+- Unit tests prove contracts but do not prove the real DOM IDs, browser event handlers, generated warning, downloaded application bundle, or LAN listener are connected correctly.
+- Binding preview to `0.0.0.0` is required for another local-network computer to reach the server instead of only this host’s loopback interface.
+
+### What worked
+- Vite reported `Network: http://192.168.0.39:4173/`; direct HTTP request to that address returned `200 15811`.
+- Browser state after processing: `Generated 1,365 toolpaths. Review the preview and warnings before export.`, square cutout checkbox `true`, and G-code preview contains `[T1]Square Frame Cutout`.
+- The visible warning reads: `The final T1 operation cuts a square frame with four holding bridges (0.80mm material retained). Do not remove the part until the spindle has stopped.`
+- Visual review of both PNGs confirmed the square-frame controls, bridge fields, safety hint, populated toolpath/G-code UI, and healthy layout.
+
+### What didn't work
+- Initial use of the harness Playwright browser failed before navigation with: `Browser is already in use for /home/manuel/.cache/ms-playwright/mcp-chrome-profile, use --isolated to run multiple instances of the same browser`.
+- The first standalone CDP attempt failed with `Handshake status 403 Forbidden` because Chrome rejected the debugging origin. Restarting Chrome with `--remote-allow-origins=*` fixed it.
+- The first CDP response reader used one excess `result` level and raised `KeyError: 'result'` after the page had actually generated successfully. I corrected the response path to `result['result']['value']`, then captured the DOM evidence and PNG successfully.
+- Headless Chrome’s synthetic G-code download did not produce a file in its configured download directory; this does not affect the application’s generated job or download handler, which browser state confirmed was enabled. Structural G-code evidence remains covered by the parser-backed pipeline test.
+
+### What I learned
+- The production preview is actively available at `http://192.168.0.39:4173/` while PID 1617728 runs; Vite also advertises other local interfaces in its log.
+- Rendering the generated job does not automatically load it into the separate G-code visualizer, which matches the UI’s explicit “View generated G-code” behavior rather than an error.
+
+### What was tricky to build
+- The existing shared Playwright profile was occupied, so browser verification required a non-destructive isolated Chrome/CDP path. I did not terminate the occupied harness browser; instead I launched Chrome with a separate `/tmp/mill-06-cdp-profile`, verified the build, and persisted review screenshots inside the ticket’s `images/` directory.
+
+### What warrants a second pair of eyes
+- A reviewer on the same LAN should open the provided URL and manually enable/process a job to confirm network routing and visual behavior from a second physical machine. The software-side request proves this host’s LAN binding but cannot prove an external machine’s firewall/network policy.
+
+### What should be done in the future
+- Run simulator, air-cut, and sacrificial-stock tests before use on a production workpiece; this coding environment cannot establish CNC hold-down or bridge adequacy.
+
+### Code review instructions
+- Visit `http://192.168.0.39:4173/`, check the square-frame option, process the cat sample, and inspect the warning/G-code preview.
+- Review `images/ui-preview.png` and `images/ui-square-frame-generated.png`, then rerun `pnpm test && pnpm build` and the LAN curl command.
+
+### Technical details
+- Preview PID file: `/tmp/abs-bicolor-v-engraver-preview.pid`; log: `/tmp/abs-bicolor-v-engraver-preview.log`.
+- LAN smoke command: `curl --fail --silent --show-error --max-time 10 -o /dev/null -w '%{http_code} %{size_download}\\n' http://192.168.0.39:4173/` → `200 15811`.
+- Commits through UI integration: `801096a` (planner), `24263b0` (emitter/UI/pipeline), with diary records `07809c8` and `42fa44e`.
+
+## Step 11: Publish the implementation handoff and complete software verification
+
+I dry-ran and uploaded an updated implementation bundle so reMarkable contains the code-status guide and diary rather than only the original design snapshot. The ticket now links code, tests, and browser screenshots; all implementation tasks are ready to close after final hygiene and commit review.
+
+The software acceptance evidence is complete: the pure planner, pass-specific writer, pipeline/UI integration, generated-G-code parser assertions, production build, browser generation, and LAN listener all have fresh evidence. Physical milling acceptance is deliberately not claimed: it requires hardware, stock, hold-down, and an operator-run simulator/air-cut/coupon process outside this environment.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 7)
+
+**Assistant interpretation:** Finish the implementation with durable documentation, appropriate commits, LAN availability, and evidence-backed verification.
+
+**Inferred user intent:** Receive a fully working software feature and review handoff without conflating code verification with unavailable physical machining evidence.
+
+### What I did
+- Ran a successful reMarkable bundle dry run and uploaded `MILL-06 Square Frame Implementation.pdf`.
+- Set the task’s final verification/documentation/delivery item ready for completion after this entry.
+- Kept the production preview process running at the verified LAN URL for user access.
+
+### Why
+- The implementation changed the guide/diary materially; publishing a separate implementation bundle preserves the original design bundle while giving reviewers current results.
+- Explicitly separating software completion from CNC physical acceptance avoids an unsafe implication that bridge dimensions have been machine-proven.
+
+### What worked
+- Dry run planned both documents and the exact destination `/ai/2026/08/01/MILL-06` without a rendering or authentication error.
+- Actual upload returned: `OK: uploaded MILL-06 Square Frame Implementation.pdf -> /ai/2026/08/01/MILL-06`.
+- The live LAN smoke test and browser screenshot evidence remain valid after the upload because no product code changed in the documentation-delivery step.
+
+### What didn't work
+- No validation or delivery command failed in this step.
+- Physical CNC simulator, air-cut, and sacrificial-stock validation were not runnable from this environment; they are the sole remaining non-software acceptance evidence, not a software defect or deferred code task.
+
+### What I learned
+- Naming the updated bundle separately avoids overwriting the already delivered design PDF and its possible annotations.
+- The app’s software contract can be fully verified from generated G-code/parsed segments and browser behavior, but material retention remains an empirical machine/process property.
+
+### What was tricky to build
+- Completion criteria mix verifiable software artifacts with inaccessible physical behavior. I closed the software ticket work only after mapping each code/UI/LAN requirement to commands, files, screenshots, or upload output, while preserving the physical validation requirement in the guide rather than silently calling it done.
+
+### What warrants a second pair of eyes
+- Review the first physical coupon’s bridge retention and manual break-off quality. If it differs from the 1.3mm ABS Makera reference, tune the now-explicit bridge thickness/span settings and capture those process-specific defaults in a follow-up.
+
+### What should be done in the future
+- Operator: simulate, air-cut, and mill a sacrificial test; record material, tool, feeds, bridge settings, retention result, and removal result before production use.
+
+### Code review instructions
+- Review commits `801096a` and `24263b0`, then documentation commits that record their evidence.
+- Reproduce `pnpm test`, `pnpm build`, browser generation, and `curl http://192.168.0.39:4173/`; inspect the uploaded implementation PDF if using reMarkable.
+
+### Technical details
+- Updated delivery: `MILL-06 Square Frame Implementation.pdf` → `/ai/2026/08/01/MILL-06`.
+- Final software suite: 4 test files / 25 tests passed; production build passed.
+- Live review URL: `http://192.168.0.39:4173/` (process PID 1617728).

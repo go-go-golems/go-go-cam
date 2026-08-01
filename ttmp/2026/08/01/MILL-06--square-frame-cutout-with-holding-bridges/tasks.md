@@ -16,4 +16,4 @@
 - [x] Implement pure square-frame and pass-proportional bridge planner with focused unit tests. <!-- t:qbpn -->
 - [x] Generalize operation emission for pass-specific variable-depth contour routes with regression tests. <!-- t:2nl6 -->
 - [x] Wire square-frame bridge settings into UI, pipeline, batch defaults, and warnings. <!-- t:cagk -->
-- [ ] Run structural G-code analysis, browser UI inspection, test/build, and update ticket documentation/delivery. <!-- t:3ond -->
+- [x] Run structural G-code analysis, browser UI inspection, test/build, and update ticket documentation/delivery. <!-- t:3ond -->

@@ -37,6 +37,10 @@ RelatedFiles:
         Bridge setting parsing and operator warning (commit 24263b0)
     - Path: repo://testdata/MakeraBadge.nc
       Note: Primary G-code evidence for the four ramped holding bridges
+    - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-preview.png
+      Note: Built UI visual smoke-test artifact
+    - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-square-frame-generated.png
+      Note: Browser-generated square-frame job visual evidence
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/scripts/01-analyze-makera-contour-bridges.py
       Note: Reproducible modal-motion bridge analysis
 ExternalSources: []
@@ -45,6 +49,7 @@ LastUpdated: 2026-08-01T20:20:00-04:00
 WhatFor: Enable an intern to safely implement and validate a square final cutout with bridge ramps in the ABS Bicolor V-Engraver.
 WhenToUse: Read before changing cutout settings, geometry planning, G-code emission, generated fixtures, or CNC validation.
 ---
+
 
 
 
@@ -58,6 +63,12 @@ The application turns a raster image into a Makera-style, multi-tool G-code job 
 This ticket proposes replacing that silhouette cutout with exactly one **square frame** centered on the cleaned artwork bounds. The cut line lies outside the artwork by the configured finishing margin plus the flat tool radius. The first cut-through-ladder pass cuts the complete frame at its nominal depth. Each later pass leaves four symmetric, side-midpoint bridges. A bridge is represented as two continuous, sloped G1 moves that rise from the nominal depth to a configured retained cut depth and descend again. This is the mechanism actually found in `testdata/MakeraBadge.nc`, not an inference from its visual output.
 
 The work is deliberately split into a pure geometry planner, a small operation-emitter generalization, settings/UI wiring, and tests. The plan preserves the existing operation order—engrave, optional flat clearing, then cutout—and does **not** add a compatibility switch for the old profile shape. The requested behavior is a semantic replacement: a checked cutout is now a square-frame cutout with bridges.
+
+## Implementation status (2026-08-01)
+
+The documented software change is implemented. `src/lib/cutout.ts` plans the frame and pass-proportional bridges; `src/lib/operations.ts` emits pass-specific pointwise-depth contour routes; `src/lib/pipeline.ts` schedules `[T1]Square Frame Cutout`; and `index.html`/`src/main.ts` expose physical bridge settings and warning text. The code was committed as `801096a` and `24263b0`, with diary commits `07809c8` and `42fa44e`.
+
+Software evidence is green: `pnpm test` passes 4 files / 25 tests, `pnpm build` passes, parser-backed integration tests find the named final toolpath and simultaneous XY/Z bridge ramps, and a built-browser smoke test generated the cat-sample job with the square cutout enabled. The production preview is available on the LAN at `http://192.168.0.39:4173/` while its preview process runs. Physical CNC validation remains required: run a simulator, air cut, and sacrificial-stock cut before using the output on a production workpiece.
 
 ## 1. Problem statement and scope
 

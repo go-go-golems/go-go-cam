@@ -44,3 +44,23 @@ Integrated square-frame bridge planning into G-code emission, pipeline, UI, and 
 - /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/lib/operations.ts — Pass-specific XYZ emission
 - /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/lib/pipeline.ts — Final square-frame operation
 
+
+## 2026-08-01
+
+Verified the implemented square-frame cutout in a production browser build and exposed the preview on the LAN (commits 801096a, 24263b0).
+
+### Related Files
+
+- /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/lib/cutout.ts — Square bridge planner
+- /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-square-frame-generated.png — Rendered browser evidence
+
+
+## 2026-08-01
+
+Published the implemented square-frame cutout handoff, with browser/LAN evidence and updated reMarkable bundle.
+
+### Related Files
+
+- /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-square-frame-generated.png — Rendered generated-job evidence
+- /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/reference/01-diary.md — Implementation delivery and verification evidence
+
