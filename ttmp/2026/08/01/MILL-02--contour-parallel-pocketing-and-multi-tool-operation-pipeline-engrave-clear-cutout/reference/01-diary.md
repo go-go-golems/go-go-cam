@@ -11,13 +11,22 @@ Topics:
 DocType: reference
 Intent: long-term
 Owners: []
-RelatedFiles: []
+RelatedFiles:
+    - Path: repo://src/lib/operations.ts
+      Note: Multi-tool program generator
+    - Path: repo://src/lib/patterns.ts
+      Note: Built-in test pattern images
+    - Path: repo://src/lib/pocketing.test.ts
+      Note: Vitest suite covering rings and program structure
+    - Path: repo://src/lib/pocketing.ts
+      Note: Contour-parallel ring extraction
 ExternalSources: []
-Summary: "Implementation diary for MILL-02: contour-parallel pocketing + multi-tool pipeline."
+Summary: 'Implementation diary for MILL-02: contour-parallel pocketing + multi-tool pipeline.'
 LastUpdated: 2026-08-01T00:47:00.854279593-04:00
 WhatFor: ""
 WhenToUse: ""
 ---
+
 
 # Diary
 
@@ -78,3 +87,58 @@ Also analyze the non-path gcode in the MakeraBadge.nc and add support for engrav
 
 ### Technical details
 - Search queries preserved in this step; captures numbered 01-07 in `sources/web/` (03 skipped: MDPI 403).
+
+## Step 2: Implementation — pocketing module, operations pipeline, test patterns
+
+Implemented the design end to end. `src/lib/pocketing.ts` composes `chamferDistance` + `traceBoundaryLoops` into `extractIsoContours` and `makeContourPocketPaths`; `src/lib/operations.ts` holds `ToolSpec`/`Operation`/`makePassLadder`/`generateProgram` (the multi-tool emitter); `main.ts` now plans up to three operations (T2 engrave, T1 flat clearing via rest machining, T1 cutout with Z ladder) and feeds the program to our own parser for the metrics display. The legacy single-tool `generateGcode` was deleted outright (no compatibility shim) — `generateProgram` is the only emitter now.
+
+Mid-implementation the user asked for test-pattern sample images; implemented as `src/lib/patterns.ts` — nine canvas-rendered black-on-white patterns (filled square, square outline, circle, ring, dumbbell, stripes, checkerboard, star, text) selectable from a dropdown, flowing through the same data-URL loading path as uploads. The ring and dumbbell patterns double as topology regression cases matching the vitest suite.
+
+### Prompt Context
+
+**User prompt (verbatim):** "add a test set of sample images with like, square outline, filled square, etc... some test patterns basically." (mid-turn; main implementation prompt: see Step 1)
+
+**Assistant interpretation:** Ship built-in test images exercising the strategies, selectable in the UI.
+
+**Inferred user intent:** Quickly eyeball how each strategy behaves on canonical shapes without hunting for image files.
+
+### What I did
+- `src/lib/pocketing.ts`: iso-contour ring extraction (level = rTool+0.5 then +stepover), innermost-first emission with nearest-neighbor ordering *within* each level so the finish ring cuts last (DR-2).
+- `src/lib/operations.ts`: MKR-style program emitter — TOOL/TOOLPATH header, TOOLPATH_START markers, M5-before-M6, per-tool S/M3, pass ladders, G28/M2 tail.
+- `src/lib/imaging.ts`: added `fillHoles` (border BFS) for the cutout silhouette.
+- `src/main.ts`: operations planner — rest-machining mask split (flat centers dilated by rFlat−0.25mm overlap via a second chamfer pass), strategy select, cutout mask from distance-to-artwork ≤ margin+rFlat, crop padding auto-expanded when cutout is on; metrics now come from parseGcode of our own output.
+- `src/lib/patterns.ts` + UI dropdown; new Operations fieldset in index.html.
+- Tests: `src/lib/pocketing.test.ts` (vitest, 8 tests): disk ring counts/ordering, dumbbell neck split, tool-too-big, pass ladders, program structure (M5 precedes T1 M6; ladder depths; empty ops skipped).
+- Verified in browser: filled square with contour+clearing+cutout → 3 toolpaths/2 tools, event order identical to MakeraBadge.nc; ring pattern → annulus fully covered, island handled. Screenshots in ticket various/.
+
+### Why
+- Feeding our generated program through our own parser for metrics kills two birds: the display is truthful, and every generation is a round-trip parser test.
+
+### What worked
+- All 8 vitest tests passed on the first run; tsc caught only one typed-array generic issue.
+
+### What didn't work
+- `sortPathsNearest` across *all* rings would have destroyed innermost-first ordering (outer finish ring could cut early near the seam). Caught in self-review before running; fixed by sorting per level with a carried cursor.
+- tsc: `Uint8Array<ArrayBufferLike>` vs `<ArrayBuffer>` assignment error again (cutMask); fixed with an explicit annotation.
+
+### What I learned
+- The rest-machining seam really does need the overlap band: with exact radius subtraction the chamfer's ±6% diagonal error left 1px slivers on the square test's corners in an early run of the mask math.
+
+### What was tricky to build
+- Rest machining without a polygon library: "what the flat tool actually cleared" = pixels within rFlat of any legal flat-tool center. Computed as a second chamfer distance *to* the flat-center region, thresholded at rFlat − overlap. Two distance transforms instead of any boolean polygon ops.
+- Cutout region can exceed the cropped canvas: crop padding is auto-raised to (margin + rFlat + 0.5mm)/mmPerPx when cutout is enabled, estimated from pre-crop bounds.
+
+### What warrants a second pair of eyes
+- `generateProgram` detail-path depth capping uses `-Math.min(...op.passDepths)`; correct for single-pass engrave ops but worth checking if anyone ever puts detail paths in a laddered op.
+- Duration for the engrave op fell from ~14min-equivalent to ~2m43s with clearing enabled on the square test — sane, but a real-stock test cut should confirm the seam quality before trusting it.
+
+### What should be done in the future
+- Spiralize rings (link adjacent levels) to cut plunge count; holding tabs for cutout; arc fitting on rings.
+
+### Code review instructions
+- Start: `src/lib/pocketing.ts` (ring loop), `src/lib/operations.ts` (generateProgram), then the operations block in `processAndGenerate` (main.ts).
+- Validate: `pnpm exec vitest run` (8 tests), `pnpm build`, then in the app: pattern "Filled square", strategy contour, enable clearing+cutout, Process → View generated G-code → 3 labeled toolpaths, events M5→T1 M6→S10000, cutout Z −0.5/−1/−1.5.
+
+### Technical details
+- Emission order: engrave (T2) → flat clearing (T1) → cutout (T1): two tool changes total, matching the badge job's convention of engraving first.
+- Test-pattern IDs: filled-square, square-outline, filled-circle, ring, dumbbell, stripes, checkerboard, star, text.

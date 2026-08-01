@@ -5,6 +5,16 @@ topics:
       description: Backend services
     - slug: websocket
       description: WebSocket lifecycle & events
+    - slug: cnc
+      description: CNC machining, milling, engraving
+    - slug: frontend
+      description: Web frontend code
+    - slug: gcode
+      description: G-code parsing, generation, visualization
+    - slug: research
+      description: Technology research and source gathering
+    - slug: toolpath-generation
+      description: CAM toolpath strategy algorithms
 docTypes:
     - slug: design-doc
       description: Structured rationale and architecture notes

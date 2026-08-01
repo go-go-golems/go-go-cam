@@ -1,51 +1,6 @@
-import type { Model, Toolpath } from "./types";
+import type { Model } from "./types";
 import { simplifyClosedLoop, traceBoundaryLoops } from "./geometry";
-import { clamp, fmt, sanitizeBaseName } from "./utils";
-
-export function generateGcode(paths: Toolpath[], model: Model, imageName: string): string {
-  const s = model.settings;
-  const safeAbsolute = s.surfaceZ + s.safeZ;
-  const lines = [
-    `(ABS bicolor engraving: ${imageName.replace(/[()]/g, "")})`,
-    `(Artwork ${fmt(model.finishedWidth)} x ${fmt(model.finishedHeight)} mm; depth cap ${fmt(s.targetDepth)} mm)`,
-    `(V-bit ${fmt(s.vAngle, 1)} deg; width at cap ${fmt(s.cutWidth)} mm; verify on scrap)`,
-    "G21",
-    "G90",
-    "G17",
-    "G94",
-    `G0 Z${fmt(safeAbsolute)}`
-  ];
-  if (s.emitSpindle) lines.push(`M3 S${s.spindleRpm}`);
-
-  for (const path of paths) {
-    if (!path.points.length) continue;
-    const first = path.points[0];
-    lines.push(`G0 X${fmt(first.x)} Y${fmt(first.y)}`);
-    if (path.kind === "detail") {
-      const firstDepth = clamp(first.depth || 0, 0, s.targetDepth);
-      lines.push(`G1 Z${fmt(s.surfaceZ - firstDepth)} F${fmt(s.feedPlunge, 1)}`);
-      if (path.points.length === 1) {
-        lines.push(`G0 Z${fmt(safeAbsolute)}`);
-        continue;
-      }
-      for (let i = 1; i < path.points.length; i++) {
-        const p = path.points[i];
-        const depth = clamp(p.depth || 0, 0, s.targetDepth);
-        lines.push(`G1 X${fmt(p.x)} Y${fmt(p.y)} Z${fmt(s.surfaceZ - depth)}${i === 1 ? ` F${fmt(s.feedXY, 1)}` : ""}`);
-      }
-    } else {
-      lines.push(`G1 Z${fmt(s.surfaceZ - (path.depth ?? 0))} F${fmt(s.feedPlunge, 1)}`);
-      for (let i = 1; i < path.points.length; i++) {
-        const p = path.points[i];
-        lines.push(`G1 X${fmt(p.x)} Y${fmt(p.y)}${i === 1 ? ` F${fmt(s.feedXY, 1)}` : ""}`);
-      }
-    }
-    lines.push(`G0 Z${fmt(safeAbsolute)}`);
-  }
-  if (s.emitSpindle) lines.push("M5");
-  lines.push(`G0 Z${fmt(safeAbsolute)}`, "M2", "");
-  return lines.join("\n");
-}
+import { fmt, sanitizeBaseName } from "./utils";
 
 export function generateSvg(mask: Uint8Array, model: Model, imageName: string): string {
   const rawLoops = traceBoundaryLoops(mask, model.width, model.height);

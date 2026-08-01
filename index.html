@@ -24,6 +24,12 @@
       </div>
       <div id="imageName" class="hint">Embedded cat sample loaded.</div>
       <div class="row">
+        <label for="testPattern">Test pattern</label>
+        <select id="testPattern">
+          <option value="" selected>— pick one —</option>
+        </select>
+      </div>
+      <div class="row">
         <label for="finishedWidth">Finished artwork width (mm)</label>
         <input id="finishedWidth" type="number" min="5" max="2000" step="0.1" value="100">
       </div>
@@ -106,6 +112,58 @@
         </select>
       </div>
       <div class="hint">Target depth is top-layer thickness plus the breakthrough margin. Measure the stock rather than relying on its nominal specification.</div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Operations</legend>
+      <div class="row">
+        <label for="pocketStrategy">Pocket clearing strategy</label>
+        <select id="pocketStrategy">
+          <option value="raster" selected>Raster (zigzag)</option>
+          <option value="contour">Contour-parallel</option>
+        </select>
+      </div>
+      <div class="check-row">
+        <input id="flatClearing" type="checkbox">
+        <label for="flatClearing">Clear wide areas with flat end mill first (T1)</label>
+      </div>
+      <div class="row">
+        <label for="flatDiameter">Flat tool diameter (mm)</label>
+        <input id="flatDiameter" type="number" min="0.5" max="12" step="0.001" value="3.175">
+      </div>
+      <div class="row">
+        <label for="flatRpm">Flat tool spindle (RPM)</label>
+        <input id="flatRpm" type="number" min="0" max="100000" step="100" value="10000">
+      </div>
+      <div class="row">
+        <label for="flatFeed">Flat tool feed (mm/min)</label>
+        <input id="flatFeed" type="number" min="1" max="50000" step="10" value="800">
+      </div>
+      <div class="row">
+        <label for="flatPlunge">Flat tool plunge (mm/min)</label>
+        <input id="flatPlunge" type="number" min="1" max="20000" step="10" value="200">
+      </div>
+      <div class="check-row">
+        <input id="cutoutEnable" type="checkbox">
+        <label for="cutoutEnable">Cut out around the artwork at the end (T1)</label>
+      </div>
+      <div class="row">
+        <label for="cutoutMargin">Cutout margin from artwork (mm)</label>
+        <input id="cutoutMargin" type="number" min="0" max="50" step="0.1" value="2">
+      </div>
+      <div class="row">
+        <label for="stockThickness">Stock thickness (mm)</label>
+        <input id="stockThickness" type="number" min="0.1" max="50" step="0.01" value="1.3">
+      </div>
+      <div class="row">
+        <label for="cutoutStepdown">Cutout stepdown per pass (mm)</label>
+        <input id="cutoutStepdown" type="number" min="0.05" max="10" step="0.05" value="0.5">
+      </div>
+      <div class="row">
+        <label for="cutoutOvercut">Overcut past stock bottom (mm)</label>
+        <input id="cutoutOvercut" type="number" min="0" max="2" step="0.05" value="0.2">
+      </div>
+      <div class="hint">The engraving bit is emitted as T2, the flat end mill as T1, matching MakeraStudio jobs. Tool changes are emitted with the spindle stopped.</div>
     </fieldset>
 
     <fieldset>

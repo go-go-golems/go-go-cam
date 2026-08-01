@@ -1,11 +1,12 @@
 import "./style.css";
 import catSampleUrl from "./assets/cat-sample.png";
-import type { Model, RasterPathsInfo, Settings, Statistics, Toolpath } from "./lib/types";
+import type { Model, Settings, Statistics, Toolpath } from "./lib/types";
 import { clamp, downloadText, formatDuration, nextFrame, sanitizeBaseName } from "./lib/utils";
 import {
   chamferDistance,
   countForeground,
   cropTypedArray,
+  fillHoles,
   foregroundBounds,
   makeMask,
   morphologicalClose,
@@ -16,15 +17,20 @@ import {
   zhangSuenThin
 } from "./lib/imaging";
 import {
-  calculateStatistics,
   makeContourPaths,
   makeDetailPaths,
   makeRasterPaths,
+  pixelToMachine,
   sortPathsNearest
 } from "./lib/toolpath";
-import { generateGcode, generateSvg } from "./lib/gcode-gen";
+import { simplifyClosedLoop, traceBoundaryLoops } from "./lib/geometry";
+import { makeContourPocketPaths } from "./lib/pocketing";
+import { generateProgram, makePassLadder, type Operation, type ToolSpec } from "./lib/operations";
+import { generateSvg } from "./lib/gcode-gen";
+import { parseGcode } from "./gcode/parser";
 import { clearCanvas, drawMask, drawRgba, drawSourceImage, drawToolpaths } from "./lib/render";
 import { setupGcodeViewer } from "./gcode/viewer";
+import { TEST_PATTERNS, renderTestPattern } from "./lib/patterns";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -167,7 +173,18 @@ function readSettings(): Settings {
     spindleRpm: Math.round(clamp(numberValue("spindleRpm", 14000), 0, 1e6)),
     emitSpindle: checked("emitSpindle"),
     mirrorX: checked("mirrorX"),
-    mirrorY: checked("mirrorY")
+    mirrorY: checked("mirrorY"),
+    pocketStrategy: $<HTMLSelectElement>("pocketStrategy").value === "contour" ? "contour" : "raster",
+    flatClearing: checked("flatClearing"),
+    flatDiameter: clamp(numberValue("flatDiameter", 3.175), 0.1, 25),
+    flatRpm: Math.round(clamp(numberValue("flatRpm", 10000), 0, 1e6)),
+    flatFeed: clamp(numberValue("flatFeed", 800), 1, 1e5),
+    flatPlunge: clamp(numberValue("flatPlunge", 200), 1, 1e5),
+    cutoutEnable: checked("cutoutEnable"),
+    cutoutMargin: clamp(numberValue("cutoutMargin", 2), 0, 100),
+    stockThickness: clamp(numberValue("stockThickness", 1.3), 0.05, 100),
+    cutoutStepdown: clamp(numberValue("cutoutStepdown", 0.5), 0.05, 10),
+    cutoutOvercut: clamp(numberValue("cutoutOvercut", 0.2), 0, 5)
   };
 }
 
@@ -185,7 +202,7 @@ function updateMetrics(model: Model, stats: Statistics): void {
 function updateWarnings(
   model: Model,
   foregroundFraction: number,
-  rasterInfo: RasterPathsInfo,
+  stepPx: number,
   broadCount: number,
   residualCount: number
 ): void {
@@ -197,7 +214,7 @@ function updateWarnings(
   if (foregroundFraction > 0.80) warnings.push("Most of the image is marked for engraving. The mask may be inverted or the threshold may be unsuitable.");
   if (model.settings.targetDepth > 0.35) warnings.push("The selected depth is relatively large for a thin cap. Confirm it from a physical cross-section or test coupon.");
   if (model.mmPerPx > model.settings.cutWidth * 1.5) warnings.push("Image pixels are larger than the V-groove width. Increase processing resolution for cleaner boundaries and narrow details.");
-  if (rasterInfo.stepPx < 0.25) warnings.push("The stepover is below one quarter of a processed pixel. The output will be large; a wider bit, shallower artwork width, or larger stepover may be more efficient.");
+  if (stepPx < 0.25) warnings.push("The stepover is below one quarter of a processed pixel. The output will be large; a wider bit, shallower artwork width, or larger stepover may be more efficient.");
   if (broadCount === 0) warnings.push("No constant-depth pocket centerline region remained after the tool-radius offset. The result consists primarily of variable-depth detail paths.");
   if (residualCount > model.width * model.height * 0.25) warnings.push("A large residual region required thinning. Consider a wider V-bit angle, a slightly deeper tested cap cut, or smaller artwork dimensions.");
   if (model.toolpaths.length > 1000) warnings.push("The job contains more than 1,000 retracting toolpaths. Keep clearance Z only as high as safely necessary, or clear broad regions with a small flat end mill and reserve the V-bit for edges and details.");
@@ -257,11 +274,21 @@ async function processAndGenerate(): Promise<void> {
 
     if (settings.autoCrop) {
       const rawBounds = foregroundBounds(mask, width, height)!;
+      // The cutout contour lives outside the artwork; keep enough border pixels
+      // for margin + tool radius or the loop would clip at the canvas edge.
+      let padding = settings.cropPadding;
+      if (settings.cutoutEnable) {
+        const mmPerPxEstimate = settings.finishedWidth / (rawBounds.maxX - rawBounds.minX + 1);
+        padding = Math.max(
+          padding,
+          Math.ceil((settings.cutoutMargin + settings.flatDiameter / 2 + 0.5) / mmPerPxEstimate)
+        );
+      }
       const bounds = {
-        minX: Math.max(0, rawBounds.minX - settings.cropPadding),
-        minY: Math.max(0, rawBounds.minY - settings.cropPadding),
-        maxX: Math.min(width - 1, rawBounds.maxX + settings.cropPadding),
-        maxY: Math.min(height - 1, rawBounds.maxY + settings.cropPadding)
+        minX: Math.max(0, rawBounds.minX - padding),
+        minY: Math.max(0, rawBounds.minY - padding),
+        maxX: Math.min(width - 1, rawBounds.maxX + padding),
+        maxY: Math.min(height - 1, rawBounds.maxY + padding)
       };
       const croppedMask = cropTypedArray(mask, width, height, bounds, 1, Uint8Array);
       const croppedGray = cropTypedArray(gray, width, height, bounds, 1, Uint8Array);
@@ -293,20 +320,74 @@ async function processAndGenerate(): Promise<void> {
     drawMask($<HTMLCanvasElement>("maskCanvas"), mask, width, height);
     $("thresholdReadout").textContent = `T=${threshold}`;
 
-    setStatus("Computing the distance field and constant-depth tool-center region…");
+    setStatus("Computing the distance field…");
     await nextFrame();
     const distanceToBackground = chamferDistance(mask, model.width, model.height, false);
+
+    const engraverTool: ToolSpec = {
+      number: 2,
+      name: `${settings.vAngle}deg V-bit (tip cut ${settings.cutWidth.toFixed(2)}mm)`,
+      type: "engraving",
+      diameter: 3.175,
+      spindleRpm: settings.spindleRpm,
+      feedXY: settings.feedXY,
+      feedPlunge: settings.feedPlunge
+    };
+    const flatTool: ToolSpec = {
+      number: 1,
+      name: `${settings.flatDiameter}mm Flat End`,
+      type: "flat",
+      diameter: settings.flatDiameter,
+      spindleRpm: settings.flatRpm,
+      feedXY: settings.flatFeed,
+      feedPlunge: settings.flatPlunge
+    };
+
+    // --- optional flat-end clearing (rest machining, DR-3) ---
+    const REST_OVERLAP_MM = 0.25;
+    let engraveMask = mask;
+    let engraveDist = distanceToBackground;
+    let flatPaths: Toolpath[] = [];
+    if (settings.flatClearing) {
+      setStatus("Planning flat-end clearing of wide areas…");
+      await nextFrame();
+      const rFlatPx = settings.flatDiameter / 2 / model.mmPerPx;
+      const flatStepPx = (settings.flatDiameter * settings.stepoverFraction) / model.mmPerPx;
+      flatPaths = makeContourPocketPaths(distanceToBackground, model, rFlatPx, flatStepPx, settings.targetDepth);
+      if (flatPaths.length) {
+        const flatCenter = new Uint8Array(mask.length);
+        for (let i = 0; i < mask.length; i++) flatCenter[i] = distanceToBackground[i] >= rFlatPx + 0.5 ? 1 : 0;
+        const distToFlatCenter = chamferDistance(flatCenter, model.width, model.height, true);
+        const clearedReach = rFlatPx - REST_OVERLAP_MM / model.mmPerPx;
+        engraveMask = new Uint8Array(mask.length);
+        for (let i = 0; i < mask.length; i++) {
+          engraveMask[i] = mask[i] && distToFlatCenter[i] > clearedReach ? 1 : 0;
+        }
+        engraveDist = chamferDistance(engraveMask, model.width, model.height, false);
+      }
+    }
+
+    // --- engraving pocket + finish + details on what remains ---
+    setStatus("Computing the constant-depth tool-center region…");
+    await nextFrame();
     const toolRadiusPx = settings.toolRadius / model.mmPerPx;
     const centerMask = new Uint8Array(mask.length);
     for (let i = 0; i < mask.length; i++) {
-      const effectiveHalfWidth = Math.max(0, distanceToBackground[i] - 0.5);
-      centerMask[i] = mask[i] && effectiveHalfWidth >= toolRadiusPx ? 1 : 0;
+      const effectiveHalfWidth = Math.max(0, engraveDist[i] - 0.5);
+      centerMask[i] = engraveMask[i] && effectiveHalfWidth >= toolRadiusPx ? 1 : 0;
     }
     const broadCount = countForeground(centerMask);
 
-    setStatus("Generating scanline pocket passes and boundary finish paths…");
+    setStatus("Generating pocket passes and boundary finish paths…");
     await nextFrame();
-    const rasterInfo = makeRasterPaths(centerMask, model);
+    const stepMm = Math.max(0.001, settings.cutWidth * settings.stepoverFraction);
+    const stepPx = stepMm / model.mmPerPx;
+    let pocketPaths: Toolpath[];
+    if (settings.pocketStrategy === "contour") {
+      pocketPaths = makeContourPocketPaths(engraveDist, model, toolRadiusPx, stepPx, settings.targetDepth);
+    } else {
+      pocketPaths = makeRasterPaths(centerMask, model).paths;
+    }
     const contourPaths = makeContourPaths(centerMask, model);
 
     setStatus("Isolating narrow details outside the pocket-pass coverage…");
@@ -314,9 +395,9 @@ async function processAndGenerate(): Promise<void> {
     let residual: Uint8Array = new Uint8Array(mask.length);
     if (broadCount) {
       const distanceToCenter = chamferDistance(centerMask, model.width, model.height, true);
-      for (let i = 0; i < mask.length; i++) residual[i] = mask[i] && distanceToCenter[i] > toolRadiusPx + 0.35 ? 1 : 0;
+      for (let i = 0; i < mask.length; i++) residual[i] = engraveMask[i] && distanceToCenter[i] > toolRadiusPx + 0.35 ? 1 : 0;
     } else {
-      residual.set(mask);
+      residual.set(engraveMask);
     }
     residual = removeSmallComponents(residual, model.width, model.height, Math.max(2, Math.floor(settings.minArea / 3)));
     const residualCount = countForeground(residual);
@@ -329,12 +410,47 @@ async function processAndGenerate(): Promise<void> {
       });
       setStatus("Tracing and simplifying variable-depth detail paths…");
       await nextFrame();
-      detailPaths = makeDetailPaths(skeleton, distanceToBackground, model);
+      detailPaths = makeDetailPaths(skeleton, engraveDist, model);
     }
 
     const orderedContours = sortPathsNearest(contourPaths, settings.originX, settings.originY);
     const orderedDetails = sortPathsNearest(detailPaths, settings.originX, settings.originY);
-    const toolpaths = [...rasterInfo.paths, ...orderedContours, ...orderedDetails];
+    const engravePaths = [...pocketPaths, ...orderedContours, ...orderedDetails];
+
+    // --- optional cutout contour around the artwork silhouette (DR-4) ---
+    let cutoutPaths: Toolpath[] = [];
+    if (settings.cutoutEnable) {
+      setStatus("Tracing the cutout contour…");
+      await nextFrame();
+      const distToArtwork = chamferDistance(mask, model.width, model.height, true);
+      const marginPx = (settings.cutoutMargin + settings.flatDiameter / 2) / model.mmPerPx;
+      let cutMask: Uint8Array = new Uint8Array(mask.length);
+      for (let i = 0; i < mask.length; i++) cutMask[i] = distToArtwork[i] <= marginPx ? 1 : 0;
+      cutMask = fillHoles(cutMask, model.width, model.height);
+      const tolerancePx = settings.simplifyTolerance / model.mmPerPx;
+      for (const loop of traceBoundaryLoops(cutMask, model.width, model.height)) {
+        const simplified = simplifyClosedLoop(loop, tolerancePx);
+        if (simplified.length < 4) continue;
+        cutoutPaths.push({
+          kind: "contour",
+          points: simplified.map((p) => pixelToMachine(p.x, p.y, model)),
+          closed: true
+        });
+      }
+    }
+
+    const operations: Operation[] = [
+      { name: "[T2]Engrave", tool: engraverTool, paths: engravePaths, passDepths: [-settings.targetDepth] },
+      { name: "[T1]Flat Clearing", tool: flatTool, paths: flatPaths, passDepths: [-settings.targetDepth] },
+      {
+        name: "[T1]Cutout",
+        tool: flatTool,
+        paths: cutoutPaths,
+        passDepths: makePassLadder(settings.stockThickness + settings.cutoutOvercut, settings.cutoutStepdown)
+      }
+    ];
+
+    const toolpaths = [...flatPaths, ...engravePaths, ...cutoutPaths];
     if (!toolpaths.length) throw new Error("No toolpaths were generated. Adjust the threshold, tool depth, or artwork dimensions.");
     model.toolpaths = toolpaths;
     model.centerMask = centerMask;
@@ -343,9 +459,19 @@ async function processAndGenerate(): Promise<void> {
 
     setStatus("Writing SVG and G-code…");
     await nextFrame();
-    const gcode = generateGcode(toolpaths, model, state.imageName);
+    const gcode = generateProgram(operations, model, `${state.imageName} engraving job`);
     const svg = generateSvg(mask, model, state.imageName);
-    const stats = calculateStatistics(toolpaths, model, gcode.split("\n").length);
+    const parsed = parseGcode(gcode);
+    const stats = {
+      cutDistance: parsed.cutDistance,
+      estimatedMinutes: parsed.estimatedMinutes,
+      counts: {
+        raster: pocketPaths.length + flatPaths.length,
+        contour: orderedContours.length + cutoutPaths.length,
+        detail: orderedDetails.length
+      },
+      lineCount: parsed.lineCount
+    };
 
     state.processed = model;
     state.toolpaths = toolpaths;
@@ -354,7 +480,7 @@ async function processAndGenerate(): Promise<void> {
 
     drawToolpaths($<HTMLCanvasElement>("toolpathCanvas"), mask, model, toolpaths);
     updateMetrics(model, stats);
-    updateWarnings(model, countForeground(mask) / mask.length, rasterInfo, broadCount, residualCount);
+    updateWarnings(model, countForeground(mask) / mask.length, stepPx, broadCount, residualCount);
     $("gcodePreview").textContent = gcode.split("\n").slice(0, 180).join("\n") + (gcode.split("\n").length > 180 ? "\n…" : "");
     $<HTMLButtonElement>("downloadGcode").disabled = false;
     $<HTMLButtonElement>("downloadSvg").disabled = false;
@@ -376,6 +502,21 @@ async function processAndGenerate(): Promise<void> {
 }
 
 const viewer = setupGcodeViewer();
+
+{
+  const select = $<HTMLSelectElement>("testPattern");
+  for (const pattern of TEST_PATTERNS) {
+    const option = document.createElement("option");
+    option.value = pattern.id;
+    option.textContent = pattern.label;
+    select.appendChild(option);
+  }
+  select.addEventListener("change", () => {
+    if (!select.value) return;
+    loadImageDataUrl(renderTestPattern(select.value), `pattern_${select.value}.png`)
+      .catch((error) => setStatus(error.message, "error"));
+  });
+}
 
 $("sampleBtn").addEventListener("click", () => loadSample().catch((error) => setStatus(error.message, "error")));
 $<HTMLInputElement>("imageFile").addEventListener("change", (event) => {

@@ -1,0 +1,120 @@
+import type { Model, Toolpath } from "./types";
+import { clamp, fmt } from "./utils";
+
+export interface ToolSpec {
+  /** T number emitted in the program. */
+  number: number;
+  name: string;
+  type: "engraving" | "flat";
+  /** Cutting diameter in mm (flat) or shank diameter (engraving). */
+  diameter: number;
+  tipDiameter?: number;
+  spindleRpm: number;
+  feedXY: number;
+  feedPlunge: number;
+}
+
+export interface Operation {
+  /** Display name, e.g. "[T1]Flat Clearing". Also emitted as MKR TOOLPATH name. */
+  name: string;
+  tool: ToolSpec;
+  paths: Toolpath[];
+  /**
+   * Z cut levels relative to surface, shallow to deep, e.g. [-0.5, -1, -1.5]
+   * for a cut-through ladder or [-0.12] for a single engraving pass. Detail
+   * paths (variable depth) ignore this and use their own per-point depths.
+   */
+  passDepths: number[];
+}
+
+/** Build the Z ladder for a cut-through operation (cutout / deep pocket). */
+export function makePassLadder(totalDepth: number, stepdown: number): number[] {
+  const depths: number[] = [];
+  const step = Math.max(0.05, stepdown);
+  for (let z = step; z < totalDepth - 1e-9; z += step) depths.push(-z);
+  depths.push(-totalDepth);
+  return depths;
+}
+
+/**
+ * Emit a complete multi-tool program in the Makera style verified against
+ * testdata/MakeraBadge.nc: MKR metadata header, per-toolpath markers, spindle
+ * stopped across tool changes, G28 + M2 at the end.
+ */
+export function generateProgram(ops: Operation[], model: Model, jobName: string): string {
+  const s = model.settings;
+  const safeAbsolute = s.surfaceZ + s.safeZ;
+  const active = ops.filter((op) => op.paths.length > 0);
+  const lines: string[] = [];
+
+  lines.push(";@MKR|BEGIN");
+  lines.push(`;@MKR|CAM|id=abs-bicolor-v-engraver|name=ABS Bicolor V-Engraver`);
+  lines.push(";@MKR|UNIT|value=mm");
+  const seenTools = new Map<number, ToolSpec>();
+  for (const op of active) seenTools.set(op.tool.number, op.tool);
+  for (const tool of seenTools.values()) {
+    lines.push(
+      `;@MKR|TOOL|number=${tool.number}|name=${tool.name}|type=${tool.type === "flat" ? "Flat End" : "Engraving"}` +
+      `|diameter=${fmt(tool.diameter)}${tool.tipDiameter !== undefined ? `|tipdiameter=${fmt(tool.tipDiameter)}` : ""}`
+    );
+  }
+  active.forEach((op, i) => {
+    lines.push(`;@MKR|TOOLPATH|number=${i + 1}|tool_number=${op.tool.number}|name=${op.name}`);
+  });
+  lines.push(";@MKR|END");
+  lines.push(`(${jobName.replace(/[()]/g, "")})`);
+  lines.push("G21", "G90", "G17", "G94");
+  lines.push(`G0 Z${fmt(safeAbsolute)}`);
+
+  let currentTool: number | null = null;
+  let spindleOn = false;
+
+  active.forEach((op, i) => {
+    lines.push(`;@MKR|TOOLPATH_START|toolpath_number=${i + 1}`);
+    if (currentTool !== op.tool.number) {
+      if (spindleOn) {
+        lines.push("M5");
+        spindleOn = false;
+      }
+      lines.push(`; T${op.tool.number}-${op.tool.name}`);
+      lines.push(`T${op.tool.number} M6`);
+      currentTool = op.tool.number;
+    }
+    if (!spindleOn && s.emitSpindle) {
+      lines.push(`S${op.tool.spindleRpm} M3`);
+      spindleOn = true;
+    }
+
+    for (const passZ of op.passDepths) {
+      for (const path of op.paths) {
+        if (!path.points.length) continue;
+        const first = path.points[0];
+        lines.push(`G0 X${fmt(first.x)} Y${fmt(first.y)}`);
+        if (path.kind === "detail") {
+          // Variable-depth V-details carry their own Z per point; they only
+          // run once, on the shallowest (single) pass.
+          if (passZ !== op.passDepths[0]) continue;
+          const firstDepth = clamp(first.depth || 0, 0, -Math.min(...op.passDepths));
+          lines.push(`G1 Z${fmt(s.surfaceZ - firstDepth)} F${fmt(op.tool.feedPlunge, 1)}`);
+          for (let p = 1; p < path.points.length; p++) {
+            const pt = path.points[p];
+            const depth = clamp(pt.depth || 0, 0, -Math.min(...op.passDepths));
+            lines.push(`G1 X${fmt(pt.x)} Y${fmt(pt.y)} Z${fmt(s.surfaceZ - depth)}${p === 1 ? ` F${fmt(op.tool.feedXY, 1)}` : ""}`);
+          }
+        } else {
+          const constDepth = path.depth !== undefined ? Math.min(path.depth, -passZ) : -passZ;
+          lines.push(`G1 Z${fmt(s.surfaceZ - constDepth)} F${fmt(op.tool.feedPlunge, 1)}`);
+          for (let p = 1; p < path.points.length; p++) {
+            const pt = path.points[p];
+            lines.push(`G1 X${fmt(pt.x)} Y${fmt(pt.y)}${p === 1 ? ` F${fmt(op.tool.feedXY, 1)}` : ""}`);
+          }
+        }
+        lines.push(`G0 Z${fmt(safeAbsolute)}`);
+      }
+    }
+  });
+
+  if (spindleOn) lines.push("M5");
+  lines.push("G28", "M2", "");
+  return lines.join("\n");
+}

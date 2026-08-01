@@ -49,6 +49,20 @@ export interface Settings {
   emitSpindle: boolean;
   mirrorX: boolean;
   mirrorY: boolean;
+  /** Pocket clearing strategy for the engraving operation. */
+  pocketStrategy: "raster" | "contour";
+  /** Clear wide areas with a flat end mill (T1) before engraving. */
+  flatClearing: boolean;
+  flatDiameter: number;
+  flatRpm: number;
+  flatFeed: number;
+  flatPlunge: number;
+  /** Cut the artwork free with a contour around its silhouette (T1). */
+  cutoutEnable: boolean;
+  cutoutMargin: number;
+  stockThickness: number;
+  cutoutStepdown: number;
+  cutoutOvercut: number;
 }
 
 export interface Model {

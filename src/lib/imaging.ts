@@ -197,6 +197,40 @@ export function cropTypedArray<T extends Uint8Array | Uint8ClampedArray>(
   return { data: out, width: cropWidth, height: cropHeight };
 }
 
+/** Fill enclosed background holes: background not reachable from the border becomes foreground. */
+export function fillHoles(mask: Uint8Array, width: number, height: number): Uint8Array {
+  const reachable = new Uint8Array(mask.length);
+  const queue = new Int32Array(mask.length);
+  let tail = 0;
+  const push = (i: number) => {
+    if (!mask[i] && !reachable[i]) {
+      reachable[i] = 1;
+      queue[tail++] = i;
+    }
+  };
+  for (let x = 0; x < width; x++) {
+    push(x);
+    push((height - 1) * width + x);
+  }
+  for (let y = 0; y < height; y++) {
+    push(y * width);
+    push(y * width + width - 1);
+  }
+  let head = 0;
+  while (head < tail) {
+    const i = queue[head++];
+    const x = i % width;
+    const y = Math.floor(i / width);
+    if (x > 0) push(i - 1);
+    if (x + 1 < width) push(i + 1);
+    if (y > 0) push(i - width);
+    if (y + 1 < height) push(i + width);
+  }
+  const out = new Uint8Array(mask.length);
+  for (let i = 0; i < mask.length; i++) out[i] = mask[i] || !reachable[i] ? 1 : 0;
+  return out;
+}
+
 export function countForeground(mask: Uint8Array): number {
   let count = 0;
   for (let i = 0; i < mask.length; i++) count += mask[i];
