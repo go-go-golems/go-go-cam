@@ -79,3 +79,12 @@ Step 7: Completed live rollout at cam.yolo.scapegoat.dev using public GHCR image
 - /home/manuel/code/wesen/2026-03-27--hetzner-k3s/gitops/applications/cam.yaml — Initial Argo Application bootstrap
 - /home/manuel/code/wesen/2026-03-27--hetzner-k3s/gitops/kustomize/cam/publish-job.yaml — Completed public publisher Job
 
+
+## 2026-08-01
+
+Step 8: Uploaded the final MILL-05 design guide, diary, and Vite static-site playbook bundle to reMarkable at /ai/2026/08/01/MILL-05.
+
+### Related Files
+
+- /home/manuel/code/wesen/go-go-golems/go-go-parc/Research/playbooks/infra/PLAYBOOK - Vite Static Site on the Shared K3s Host.md — Reusable public Vite static-site deployment procedure
+

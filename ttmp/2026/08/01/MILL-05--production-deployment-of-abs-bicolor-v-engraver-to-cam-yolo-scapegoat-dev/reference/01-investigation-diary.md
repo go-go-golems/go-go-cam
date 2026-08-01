@@ -738,3 +738,65 @@ PR #286 was merged, the Argo Application was applied once, and the publisher com
 - Argo revision: `2f3f07a47756d67e7a10510cedd9558996a15f9f`.
 - Active release path: `/srv/sites/cam.yolo.scapegoat.dev/releases/sha-2b00365`.
 - Public URL: `https://cam.yolo.scapegoat.dev/`.
+
+## Step 8: Publish the final documentation bundle
+
+The deployment evidence and reusable operating procedure are now delivered to the reMarkable device as one navigable PDF bundle. The bundle contains the production design guide, the chronological investigation diary, and the reusable Vite static-site playbook.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 7)
+
+**Assistant interpretation:** Continue through the remaining documentation and handoff work after completing the live rollout.
+
+**Inferred user intent:** Leave the deployment operationally complete and make the implementation reusable for future static-site work.
+
+**Commit (code):** Pending documentation commit.
+
+### What I did
+
+- Ran `docmgr doctor --ticket MILL-05 --stale-after 30` successfully.
+- Marked the documentation-upload task complete.
+- Uploaded `MILL-05 CAM Public Static Site Deployment.pdf` to `/ai/2026/08/01/MILL-05`.
+- Included the design guide, diary, and `PLAYBOOK - Vite Static Site on the Shared K3s Host.md`.
+
+### Why
+
+- The deployment decision, bootstrap boundary, live evidence, and reusable playbook should be available away from the source checkout.
+
+### What worked
+
+- reMarkable reported:
+
+  ```text
+  OK: uploaded MILL-05 CAM Public Static Site Deployment.pdf -> /ai/2026/08/01/MILL-05
+  ```
+
+### What didn't work
+
+- N/A.
+
+### What I learned
+
+- The final bundle is sufficient as a handoff artifact: it contains both the CAM-specific evidence and the reusable platform procedure.
+
+### What was tricky to build
+
+- N/A; the upload used the documented bundle path and completed without reauthentication or filename changes.
+
+### What warrants a second pair of eyes
+
+- N/A for the upload itself. Reviewers should use the live rollout evidence in Step 7 for deployment correctness.
+
+### What should be done in the future
+
+- Pin the reusable workflow reference and add browser-level production smoke coverage.
+
+### Code review instructions
+
+- Inspect the uploaded bundle at `/ai/2026/08/01/MILL-05` and compare it with the committed ticket documents.
+
+### Technical details
+
+- Bundle: `MILL-05 CAM Public Static Site Deployment.pdf`.
+- Remote path: `/ai/2026/08/01/MILL-05`.
