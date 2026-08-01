@@ -8,7 +8,7 @@ import { clearCanvas, drawMask, drawRgba, drawSourceImage, drawToolpaths } from 
 import { setupGcodeViewer } from "./gcode/viewer";
 import { TEST_PATTERNS, renderTestPattern } from "./lib/patterns";
 import { settingsStorageKeyForImage } from "./lib/settings-storage";
-import { SETTING_METADATA, SETTINGS_CONTROL_IDS, WORKSPACES, type PresetScope, type WorkspaceId } from "./lib/settings-ui";
+import { SETTING_METADATA, SETTINGS_CONTROL_IDS, WORKSPACES, type PresetScope, type SettingControlId, type WorkspaceId } from "./lib/settings-ui";
 import { buildCamPreset, deleteCamPreset, diffCamPreset, formatCamPreset, loadCamPresets, parseCamPreset, saveCamPreset, type CamPreset } from "./lib/cam-presets";
 import {
   formatSettingsTransfer,
@@ -139,6 +139,39 @@ function setupSettingsWorkspace(): void {
   const workspaceByFieldset: WorkspaceId[] = ["artwork", "artwork", "engraving", "t1", "recipes", "machine"];
   fieldsets.forEach((fieldset, index) => fieldset.dataset.workspace = workspaceByFieldset[index] ?? "artwork");
 
+  const popover = document.createElement("section");
+  popover.className = "setting-help-popover";
+  popover.hidden = true;
+  popover.setAttribute("role", "dialog");
+  popover.setAttribute("aria-live", "polite");
+  document.body.append(popover);
+  let activeHelp: HTMLButtonElement | null = null;
+  const closeHelp = () => {
+    if (activeHelp) activeHelp.setAttribute("aria-expanded", "false");
+    activeHelp = null;
+    popover.hidden = true;
+  };
+  const openHelp = (button: HTMLButtonElement, title: string, meta: typeof SETTING_METADATA[SettingControlId]) => {
+    if (activeHelp === button) { closeHelp(); return; }
+    activeHelp?.setAttribute("aria-expanded", "false");
+    activeHelp = button;
+    button.setAttribute("aria-expanded", "true");
+    popover.replaceChildren();
+    const heading = document.createElement("strong"); heading.textContent = title;
+    const what = document.createElement("p"); what.innerHTML = `<strong>What it is</strong><br>${meta.purpose}`;
+    const affects = document.createElement("p"); affects.innerHTML = `<strong>What it changes</strong><br>${meta.affects}`;
+    popover.append(heading, what, affects);
+    if (meta.caution) { const caution = document.createElement("p"); caution.innerHTML = `<strong>Check first</strong><br>${meta.caution}`; popover.append(caution); }
+    popover.hidden = false;
+    const rect = button.getBoundingClientRect();
+    const width = Math.min(320, window.innerWidth - 16);
+    popover.style.width = `${width}px`;
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+    popover.style.left = `${left}px`;
+    popover.style.top = `${Math.min(rect.bottom + 8, window.innerHeight - popover.offsetHeight - 8)}px`;
+  };
+  document.addEventListener("click", (event) => { if (!popover.contains(event.target as Node) && event.target !== activeHelp) closeHelp(); });
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeHelp(); });
   for (const id of SETTINGS_CONTROL_IDS) {
     const meta = SETTING_METADATA[id];
     const control = settingControl(id);
@@ -146,15 +179,13 @@ function setupSettingsWorkspace(): void {
     if (setting && meta.advanced) setting.classList.add("advanced-setting");
     const label = controls.querySelector<HTMLLabelElement>(`label[for="${id}"]`);
     if (!label) continue;
-    const help = document.createElement("details");
+    const help = document.createElement("button");
+    help.type = "button";
     help.className = "setting-help";
-    const summary = document.createElement("summary");
-    summary.setAttribute("aria-label", `Explain ${label.textContent?.trim() ?? id}`);
-    summary.textContent = "?";
-    const body = document.createElement("div");
-    body.className = "setting-help-body";
-    body.innerHTML = `<strong>What it is</strong><p>${meta.purpose}</p><strong>What it changes</strong><p>${meta.affects}</p>${meta.caution ? `<strong>Check first</strong><p>${meta.caution}</p>` : ""}`;
-    help.append(summary, body);
+    help.textContent = "?";
+    help.setAttribute("aria-label", `Explain ${label.textContent?.trim() ?? id}`);
+    help.setAttribute("aria-expanded", "false");
+    help.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); openHelp(help, label.childNodes[0]?.textContent?.trim() || id, meta); });
     label.append(" ", help);
   }
 

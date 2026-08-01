@@ -115,14 +115,11 @@
   .advanced-setting { display: none; }
   .show-advanced .advanced-setting { display: grid; }
   .show-advanced .check-row.advanced-setting { display: flex; }
-  .setting-help { display: inline-block; position: relative; vertical-align: middle; }
-  .setting-help summary { list-style: none; display: inline-grid; place-items: center; width: 16px; height: 16px; border: 1px solid #7a8995; border-radius: 50%; color: var(--accent); cursor: help; font-size: 11px; font-weight: 800; }
-  .setting-help summary::-webkit-details-marker { display: none; }
-  .setting-help summary:focus-visible { outline: 2px solid rgba(30, 95, 138, .32); outline-offset: 2px; }
-  .setting-help-body { position: absolute; z-index: 20; left: 0; top: 22px; width: min(300px, 76vw); padding: 10px; border: 1px solid #aeb9c4; border-radius: 8px; background: #fff; box-shadow: var(--shadow); color: var(--ink); font-size: 11px; line-height: 1.35; }
-  .setting-help-body strong { display: block; margin-top: 6px; color: var(--accent-dark); }
-  .setting-help-body strong:first-child { margin-top: 0; }
-  .setting-help-body p { margin: 2px 0 0; }
+  .setting-help { display: inline-grid; place-items: center; width: 16px; height: 16px; padding: 0; vertical-align: middle; border: 1px solid #7a8995; border-radius: 50%; color: var(--accent); background: white; cursor: help; font-size: 11px; font-weight: 800; }
+  .setting-help:focus-visible { outline: 2px solid rgba(30, 95, 138, .32); outline-offset: 2px; }
+  .setting-help-popover { position: fixed; z-index: 1000; padding: 11px; border: 1px solid #aeb9c4; border-radius: 8px; background: #fff; box-shadow: var(--shadow); color: var(--ink); font-size: 12px; line-height: 1.4; }
+  .setting-help-popover > strong { color: var(--accent-dark); }
+  .setting-help-popover p { margin: 7px 0 0; }
   .cam-explainer { margin-top: 14px; padding: 10px; border: 1px solid #bfd0db; border-radius: 8px; background: #f7fafc; }
   .cam-explainer h3 { margin: 0 0 6px; font-size: 12px; color: var(--accent-dark); }
   .cam-explainer p { margin: 6px 0 0; font-size: 11px; line-height: 1.35; }

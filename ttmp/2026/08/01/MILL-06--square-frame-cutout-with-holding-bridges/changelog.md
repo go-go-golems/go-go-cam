@@ -138,3 +138,12 @@ Completed CAM UI browser acceptance; versioned required whole-job settings and p
 
 - /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/lib/settings-transfer.ts — Whole-job schema v3
 
+
+## 2026-08-01
+
+Fixed clipped setting-help tooltips by moving their popover to a viewport-bounded body-level overlay.
+
+### Related Files
+
+- /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/main.ts — Tooltip overlay repair
+

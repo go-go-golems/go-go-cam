@@ -40,7 +40,9 @@ RelatedFiles:
     - Path: repo://src/lib/settings-ui.ts
       Note: Step 17 metadata/help/workspace registry
     - Path: repo://src/main.ts
-      Note: Step 12 transfer, validation, and image restore wiring (commit f74bfca)
+      Note: |-
+        Step 12 transfer, validation, and image restore wiring (commit f74bfca)
+        Step 20 fixed-position accessible help popover
     - Path: repo://testdata/MakeraBadge.nc
       Note: Primary evidence inspected chronologically
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/design-doc/01-square-frame-cutout-with-holding-bridges-analysis-design-and-implementation-guide.md
@@ -55,6 +57,8 @@ RelatedFiles:
       Note: Step 13 browser verification
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-preview.png
       Note: Step 10 initial browser smoke-test screenshot
+    - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-setting-help-fixed.png
+      Note: Step 20 unclipped browser evidence
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-settings-transfer.png
       Note: Step 12 rendered UI verification
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-square-frame-generated.png
@@ -69,6 +73,7 @@ LastUpdated: 2026-08-01T20:09:00-04:00
 WhatFor: Preserve the research trail and implementation review guidance for MILL-06.
 WhenToUse: Read before continuing ticket research or implementing the proposed cutout.
 ---
+
 
 
 
@@ -1206,3 +1211,56 @@ The new T1 setting is part of the full per-image job contract, so I advanced the
 ### Technical details
 - Full-job format/storage: `abs-bicolor-v-engraver/settings` v3 and `abs-bicolor-v-engraver/image-settings/v3/<fingerprint>`.
 - Browser smoke: 5 workspaces, 49 help disclosures, 3 explainers; T1 ladder -0.050/-0.100/-0.120mm; generated status 1,864 toolpaths; LAN HTTP 200.
+
+## Step 20: Repair clipped setting-help popovers
+
+The original detailed-help disclosure was positioned absolutely inside the scrolling sidebar. That made an open tooltip extend past the sidebar’s right edge and be clipped by its overflow boundary. I replaced the per-label `<details>` body with a single body-level fixed-position popover, preserving a keyboard-focusable question-mark button on every setting while placing the text above all layout columns.
+
+### Prompt Context
+
+**User prompt (verbatim):** "tool tips don't work / show properly.
+
+[REMINDER] Output a <summary>...</summary> block at the VERY END of your response. This is mandatory."
+
+**Assistant interpretation:** Diagnose the rendered help UI and make the detailed tooltips reliably visible.
+
+**Inferred user intent:** Read setting explanations without a sidebar layout artifact hiding their text.
+
+**Commit (code):** Pending this focused fix commit.
+
+### What I did
+- Reproduced the report in Chromium: an open old tooltip was clipped at the scrollable sidebar boundary.
+- Replaced local absolute help bodies with one `role="dialog"`, fixed-position body-level popover.
+- Kept question-mark buttons focusable, added `aria-expanded`, outside-click close, Escape close, and guarded label-default behavior so help clicks do not toggle the associated input.
+- Constrained placement to the viewport’s right/bottom edges.
+- Ran `pnpm test && pnpm build`: 7 test files / 34 tests passed, TypeScript/Vite build passed.
+- Browser-verified `aria-expanded=true`, a visible popover, and a 320px-wide on-screen rectangle; screenshot review confirmed full readability/no clipping.
+
+### Why
+- A z-index cannot escape an ancestor’s `overflow: auto`; the overlay must leave the clipping context.
+
+### What worked
+- The repaired popover floated above the sidebar and main workspace without text being obscured.
+
+### What didn't work
+- The original `<details>` implementation had a valid open state but failed visually because its absolutely positioned content remained inside `.controls`.
+
+### What I learned
+- Popover state and visibility must be tested separately: DOM `open=true` did not prove that the previous tooltip was actually readable.
+
+### What was tricky to build
+- The button lives beside a label associated with an input, so its click must prevent the label’s default activation before opening the help dialog. The repair also computes a bounded fixed position after rendering to account for actual help height.
+
+### What warrants a second pair of eyes
+- Check touch-screen tap targeting and screen-reader announcement behavior on the operator’s target device; desktop keyboard Escape/outside-click behavior is covered by implementation/browser evidence.
+
+### What should be done in the future
+- N/A.
+
+### Code review instructions
+- Review `setupSettingsWorkspace` in `src/main.ts` and `.setting-help-popover` CSS.
+- Open a `?` in the LAN UI, press Escape, reopen it, then click outside; confirm it neither clips nor changes the adjacent field.
+
+### Technical details
+- The popover uses `position: fixed; z-index: 1000`, a max 320px viewport-bounded width, and `role="dialog"`.
+- Screenshot evidence: `/tmp/tip-fixed.png` during validation (ephemeral); browser geometry: x=187.875, y=419.719, width=320, height=155.578.
