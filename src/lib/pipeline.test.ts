@@ -42,6 +42,7 @@ describe("runPipeline square frame cutout", () => {
       mirrorY: false,
       pocketStrategy: "contour",
       flatClearing: false,
+      flatClearingStepdown: 0.1,
       flatDiameter: 3.175,
       flatRpm: 10000,
       flatFeed: 800,
@@ -80,5 +81,31 @@ describe("runPipeline square frame cutout", () => {
       (segment.x1 !== segment.x2 || segment.y1 !== segment.y2) && segment.z2 === -0.5
     )).toBe(true);
     expect(frameSegments.some((segment) => segment.z2 === -1.5)).toBe(true);
+  });
+
+  it("repeats T1 clearing routes through a separate depth ladder", async () => {
+    const settings = deriveSettings({
+      finishedWidth: 100, maxDimension: 1000, thresholdMode: "manual", manualThreshold: 128,
+      openRadius: 0, closeRadius: 0, minArea: 0, simplifyTolerance: 0, autoCrop: false, cropPadding: 0, invert: false,
+      vAngle: 30, capThickness: 0.20, breakthrough: 0.02, stepoverFraction: 0.45, rasterDirection: "horizontal",
+      originX: 0, originY: 0, surfaceZ: 0, safeZ: 3, approachZ: 2, hopZ: 2, hopMaxTravel: 5,
+      feedXY: 1000, feedPlunge: 500, spindleRpm: 12000, emitSpindle: true, mirrorX: false, mirrorY: false,
+      pocketStrategy: "contour", flatClearing: true, flatClearingStepdown: 0.10,
+      flatDiameter: 3.175, flatRpm: 10000, flatFeed: 800, flatPlunge: 200,
+      cutoutEnable: false, cutoutUseUniformMargin: true, cutoutMargin: 2, cutoutMarginTop: 2, cutoutMarginRight: 2,
+      cutoutMarginBottom: 2, cutoutMarginLeft: 2, cutoutCornerRadius: 3, stockThickness: 1.3,
+      cutoutStepdown: 0.5, cutoutOvercut: 0.2, cutoutBridgeThickness: 0.8, cutoutBridgeSpan: 12.4
+    });
+    const result = await runPipeline({ width: 40, height: 20, gray: rectangularArtwork(40, 20) }, settings, "clearing ladder test");
+    const clearing = result.operations.find((operation) => operation.name === "[T1]Flat Clearing")!;
+    const parsed = parseGcode(result.gcode);
+    const clearingToolpath = parsed.toolpaths.find((toolpath) => toolpath.name === "[T1]Flat Clearing")!;
+    const depths = new Set(parsed.segments
+      .filter((segment) => segment.toolpath === clearingToolpath.index && !segment.rapid)
+      .map((segment) => Number(segment.z2.toFixed(3))));
+
+    expect(clearing.paths.length).toBeGreaterThan(0);
+    expect(clearing.passDepths).toEqual([-0.1, -0.2, -0.22]);
+    expect(depths).toEqual(new Set([-0.1, -0.2, -0.22]));
   });
 });

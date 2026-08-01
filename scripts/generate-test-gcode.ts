@@ -64,6 +64,7 @@ const settings = deriveSettings({
   mirrorY: false,
   pocketStrategy: strategyArg,
   flatClearing: true,
+  flatClearingStepdown: 0.1,
   flatDiameter: 3.175,
   flatRpm: 10000,
   flatFeed: 800,

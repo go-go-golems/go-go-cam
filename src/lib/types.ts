@@ -63,6 +63,8 @@ export interface Settings {
   flatRpm: number;
   flatFeed: number;
   flatPlunge: number;
+  /** Maximum T1 wide-area-clearing depth increment; final pass lands at targetDepth. */
+  flatClearingStepdown: number;
   /** Cut a rounded frame around the artwork at the end of the job (T1). */
   cutoutEnable: boolean;
   /** Use one finished edge margin for every frame side. */

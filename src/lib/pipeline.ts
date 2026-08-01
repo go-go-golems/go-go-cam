@@ -241,7 +241,14 @@ export async function runPipeline(
 
   const operations: Operation[] = [
     { name: "[T2]Engrave", tool: engraverTool, paths: engravePaths, passDepths: [-settings.targetDepth] },
-    { name: "[T1]Flat Clearing", tool: flatTool, paths: flatPaths, passDepths: [-settings.targetDepth] },
+    {
+      name: "[T1]Flat Clearing",
+      tool: flatTool,
+      paths: flatPaths,
+      // Routes are authored at targetDepth; the emitter caps them at each
+      // ladder level so T1 takes repeated, shallower clearing passes.
+      passDepths: makePassLadder(settings.targetDepth, settings.flatClearingStepdown)
+    },
     {
       name: "[T1]Frame Cutout",
       tool: flatTool,

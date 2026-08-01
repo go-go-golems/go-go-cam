@@ -102,3 +102,12 @@ Directly uploaded CAM settings design PDF to /ai/2026/08/02/MILL-06 at the user'
 
 - /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/design-doc/02-cam-settings-information-architecture-previews-and-scoped-presets.md — Delivered CAM settings design
 
+
+## 2026-08-01
+
+Added separate T1 clearing depth-per-pass ladder with parser-backed target-depth regression coverage.
+
+### Related Files
+
+- /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/lib/pipeline.ts — Independent T1 clearing scheduling
+

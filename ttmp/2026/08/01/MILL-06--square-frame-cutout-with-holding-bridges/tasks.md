@@ -20,3 +20,8 @@
 - [x] Add copy/paste settings transfer and image-indexed localStorage restoration with tests and browser verification. <!-- t:76fm -->
 - [x] Add rounded frame corners and selectable uniform or per-side margins, with geometry/UI/browser verification. <!-- t:nqo2 -->
 - [x] Design CAM settings information architecture, contextual previews/tooltips, scoped presets, and T1 clearing stepdown before implementation. <!-- t:bpkt -->
+- [ ] Implement typed setting metadata, workspace navigation, Basic/Advanced grouping, and accessible detailed help. <!-- t:neit -->
+- [x] Implement T1 clearing depth-per-pass setting, pass ladder, validation, and parser-backed regression tests. <!-- t:1f9h -->
+- [ ] Implement bounded live CAM explainers for V-bit, T1 depth, frame/bridges, and machine Z motion. <!-- t:6pmn -->
+- [ ] Implement scoped named CAM presets with local storage, import/export, change diff, and validation tests while preserving image settings. <!-- t:yvhw -->
+- [ ] Run full automated/browser validation, update documentation/diary, and commit implementation evidence. <!-- t:tv30 -->

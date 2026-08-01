@@ -50,7 +50,7 @@ const SETTINGS_CONTROL_IDS = [
   "finishedWidth", "autoCrop", "cropPadding", "invertMask",
   "maxDimension", "thresholdMode", "manualThreshold", "openRadius", "closeRadius", "minArea", "simplifyTolerance",
   "vAngle", "capThickness", "breakthrough", "stepover", "rasterDirection",
-  "pocketStrategy", "flatClearing", "flatDiameter", "flatRpm", "flatFeed", "flatPlunge",
+  "pocketStrategy", "flatClearing", "flatClearingStepdown", "flatDiameter", "flatRpm", "flatFeed", "flatPlunge",
   "cutoutEnable", "cutoutUseUniformMargin", "cutoutMargin", "cutoutMarginTop", "cutoutMarginRight", "cutoutMarginBottom", "cutoutMarginLeft", "cutoutCornerRadius", "stockThickness", "cutoutStepdown", "cutoutOvercut", "cutoutBridgeThickness", "cutoutBridgeSpan",
   "originX", "originY", "surfaceZ", "safeZ", "approachZ", "hopZ", "hopMaxTravel", "feedXY", "feedPlunge", "spindleRpm", "emitSpindle", "mirrorX", "mirrorY"
 ] as const;
@@ -334,6 +334,7 @@ function readSettings(): Settings {
       ? $<HTMLSelectElement>("pocketStrategy").value
       : "raster") as Settings["pocketStrategy"],
     flatClearing: checked("flatClearing"),
+    flatClearingStepdown: clamp(numberValue("flatClearingStepdown", 0.1), 0.05, 10),
     flatDiameter: clamp(numberValue("flatDiameter", 3.175), 0.1, 25),
     flatRpm: Math.round(clamp(numberValue("flatRpm", 10000), 0, 1e6)),
     flatFeed: clamp(numberValue("flatFeed", 800), 1, 1e5),

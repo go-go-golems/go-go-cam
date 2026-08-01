@@ -20,9 +20,13 @@ RelatedFiles:
     - Path: repo://src/lib/operations.ts
       Note: Step 9 writer implementation (commit 24263b0)
     - Path: repo://src/lib/pipeline.test.ts
-      Note: Step 9 structural verification (commit 24263b0)
+      Note: |-
+        Step 9 structural verification (commit 24263b0)
+        Step 16 parser-backed T1 ladder test
     - Path: repo://src/lib/pipeline.ts
-      Note: Step 9 pipeline integration (commit 24263b0)
+      Note: |-
+        Step 9 pipeline integration (commit 24263b0)
+        Step 16 T1 clearing pass ladder
     - Path: repo://src/main.ts
       Note: Step 12 transfer, validation, and image restore wiring (commit f74bfca)
     - Path: repo://testdata/MakeraBadge.nc
@@ -49,6 +53,7 @@ LastUpdated: 2026-08-01T20:09:00-04:00
 WhatFor: Preserve the research trail and implementation review guidance for MILL-06.
 WhenToUse: Read before continuing ticket research or implementing the proposed cutout.
 ---
+
 
 
 
@@ -928,3 +933,97 @@ This is a documentation delivery only. It does not implement tooltips, the reorg
 - Delivered file: `MILL-06 CAM Settings Design.pdf`.
 - Remote directory: `/ai/2026/08/02/MILL-06`.
 - Upload confirmation: `OK: uploaded MILL-06 CAM Settings Design.pdf -> /ai/2026/08/02/MILL-06`.
+
+## Step 16: Add an independent T1 wide-area-clearing depth ladder
+
+I implemented the first low-risk outcome from the CAM-settings design: a T1 clearing depth-per-pass control. `flatClearingStepdown` now schedules the existing T1 clearing routes through the existing shallow-to-deep ladder, while the V-bit target depth remains the final endpoint and final-frame `cutoutStepdown` remains independent.
+
+The implementation intentionally changes scheduling rather than pocket geometry. T1 routes are still planned once at target depth; the existing emitter caps a constant-depth route at the active pass, so each route is repeated at each safe ladder depth and the final pass lands exactly at `targetDepth`.
+
+### Prompt Context
+
+**User prompt (verbatim):** "User task:
+Implement the new UI. Keep a detailed frequent diary as you work, committing at appropriate intervals. Use the diary format from the skill [REMINDER] Output a <summary>...</summary> block at the VERY END of your response. This is mandatory.
+
+Turn the user task into exactly one durable pi-codex-goal objective, then call the goal creation tool with that objective.
+
+This prompt invocation is an explicit user request to set a new goal. When the goal creation tool exposes `replace_existing`, pass `replace_existing: true` so an existing active, paused, or budget-limited goal is replaced instead of requiring `/goal clear` first.
+
+Do not set a token budget limit unless the user explicitly provides a budget/limit in the task. If no explicit budget is provided, omit the token budget field entirely.
+
+The goal must be a completion contract, not a task summary. Preserve the user's full intent. Do not weaken broad acceptance criteria such as "all", "any", "complete", "no tech debt", "do it right", "fully", or "hard acceptance criteria".
+
+The goal must require:
+
+1. Outcome
+   - State what must be true when complete.
+   - Preserve the full requested end state.
+   - Do not narrow scope after the fact unless the original user task explicitly defined that scope.
+
+2. Verification evidence
+   - Name the concrete evidence required before completion.
+   - Include relevant tests, lint, type checks, builds, smoke checks, diffs, docs, generated outputs, rendered UI inspection, or artifact checks when applicable.
+   - If the repo has an existing local CI/validation command, require it unless clearly irrelevant.
+
+3. Constraints
+   - Preserve existing behavior unless the task explicitly changes it.
+   - Do not discard user changes.
+   - Do not leave unapproved shortcuts, compatibility shims, TODO placeholders, dead code, duplicated logic, hidden assumptions, or undocumented behavior changes.
+
+4. Iteration policy
+   - After each attempt, inspect evidence, update the plan, and keep taking the next low-risk useful step.
+   - Do not stop at a plan when implementation or verification remains.
+   - If validation fails, triage and fix the cause rather than reporting partial completion.
+
+5. Completion audit
+   - Before marking the goal complete, map every explicit requirement in the goal to fresh evidence from files, commands, diffs, tests, screenshots, artifacts, or logs.
+   - The goal is not complete if any requirement is unverified, narrowed, deferred, or only probably satisfied.
+   - Phrases like "for the scope this is complete", "good enough", "out of scope", or "remaining tech debt" are not valid completion evidence unless the original user task explicitly allowed that limitation.
+
+6. Blocked stop condition
+   - If completion is impossible with current access, tools, budget, or missing decisions, stop without marking complete.
+   - Report attempted paths, evidence gathered, exact blockers, remaining unmet requirements, and what input would unblock progress.
+
+Use concise imperative language in the goal. If the task is blank or only whitespace, infer the goal based on the conversation context or ask the user to clarify."
+
+**Assistant interpretation:** Implement the approved CAM settings design fully while maintaining frequent diary evidence and focused commit boundaries.
+
+**Inferred user intent:** Turn the design into a safe, understandable, verified operator interface rather than adding isolated controls to the old long form.
+
+**Commit (code):** Pending this step’s focused commit.
+
+### What I did
+- Added `flatClearingStepdown` to `Settings`, UI input/persistence control inventory, batch defaults, and browser settings reader.
+- Changed `[T1]Flat Clearing` to use `makePassLadder(settings.targetDepth, settings.flatClearingStepdown)`.
+- Added parser-backed pipeline coverage proving a 0.22mm target with 0.10mm passes emits exactly `[-0.1, -0.2, -0.22]` in T1 clearing G-code.
+- Ran `pnpm test && pnpm build`: 5 files / 30 tests passed; typecheck and production build passed.
+
+### Why
+- The former one-pass T1 schedule ignored the requested ability to reduce per-pass cutter load, while reusing `cutoutStepdown` would couple two physically different operations.
+
+### What worked
+- Existing constant-depth emission needed no new route representation: it already caps a target-depth route to the current pass depth.
+- The integration test sees all three expected non-rapid Z depths in the parsed T1 toolpath.
+
+### What didn't work
+- No test or build failure occurred in this step.
+
+### What I learned
+- The T1 pass ladder can be added without modifying pocket planning or rest-machining coverage because Z scheduling belongs to `Operation.passDepths`.
+
+### What was tricky to build
+- A flat-clear operation with no routes must not create a toolpath merely because it has a pass list. The existing program filter already ignores it because `paths` is empty; retaining this behavior avoided an empty T1 tool change.
+
+### What warrants a second pair of eyes
+- The initial 0.10mm default is a design seed, not physical cutting validation. Operators still need tool/material/workholding-specific testing.
+
+### What should be done in the future
+- Integrate this setting into the planned T1 depth-ladder explainer and detailed help before calling the new UI complete.
+
+### Code review instructions
+- Review `src/lib/pipeline.ts`’s `[T1]Flat Clearing` operation and the parser-backed test in `src/lib/pipeline.test.ts`.
+- Run `pnpm test && pnpm build`; inspect the test’s parsed T1 Z set.
+
+### Technical details
+- New DOM id/settings field: `flatClearingStepdown` (0.05–10mm, default 0.10mm).
+- Expected example: target=0.22mm / step=0.10mm gives T1 passes at -0.10, -0.20, and -0.22mm.
