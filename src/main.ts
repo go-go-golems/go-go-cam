@@ -13,6 +13,7 @@ import { buildCamPreset, deleteCamPreset, diffCamPreset, formatCamPreset, loadCa
 import {
   formatSettingsTransfer,
   parseSettingsTransfer,
+  SETTINGS_TRANSFER_VERSION,
   type SettingsTransfer,
   type SettingsTransferValues
 } from "./lib/settings-transfer";
@@ -353,7 +354,7 @@ function loadRecipe(): void {
     const preset = selectedPreset();
     if (!preset) throw new Error("Choose a saved recipe first.");
     const merged = { ...readSettingsTransferControls(), ...preset.values };
-    applySettingsTransfer({ format: "abs-bicolor-v-engraver/settings", version: 2, settings: merged });
+    applySettingsTransfer({ format: "abs-bicolor-v-engraver/settings", version: SETTINGS_TRANSFER_VERSION, settings: merged });
     saveSettingsForCurrentImage();
     $<HTMLTextAreaElement>("presetTransfer").value = formatCamPreset(preset);
     updatePresetDiff();

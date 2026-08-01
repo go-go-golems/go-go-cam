@@ -1,4 +1,4 @@
-const IMAGE_SETTINGS_KEY_PREFIX = "abs-bicolor-v-engraver/image-settings/v2/";
+const IMAGE_SETTINGS_KEY_PREFIX = "abs-bicolor-v-engraver/image-settings/v3/";
 
 /**
  * Fast, deterministic two-lane hash for a data URL. It is an index key, not a

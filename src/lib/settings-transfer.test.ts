@@ -20,7 +20,7 @@ describe("settings transfer", () => {
   it("rejects unsupported payloads and non-finite values", () => {
     expect(() => parseSettingsTransfer("not json")).toThrow("valid JSON");
     expect(() => parseSettingsTransfer('{"format":"other","version":1,"settings":{}}')).toThrow("not supported");
-    expect(() => parseSettingsTransfer('{"format":"abs-bicolor-v-engraver/settings","version":2,"settings":{"x":null}}'))
+    expect(() => parseSettingsTransfer('{"format":"abs-bicolor-v-engraver/settings","version":3,"settings":{"x":null}}'))
       .toThrow("unsupported value");
   });
 });

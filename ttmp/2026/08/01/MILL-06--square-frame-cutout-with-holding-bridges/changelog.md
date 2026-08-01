@@ -129,3 +129,12 @@ Added scoped CAM recipes and live geometry/depth explainers while retaining per-
 
 - /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/lib/cam-presets.ts — Scoped recipe implementation
 
+
+## 2026-08-01
+
+Completed CAM UI browser acceptance; versioned required whole-job settings and per-image storage to v3 for T1 clearing depth per pass.
+
+### Related Files
+
+- /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/lib/settings-transfer.ts — Whole-job schema v3
+

@@ -31,6 +31,10 @@ RelatedFiles:
       Note: |-
         Step 9 pipeline integration (commit 24263b0)
         Step 16 T1 clearing pass ladder
+    - Path: repo://src/lib/settings-storage.ts
+      Note: Step 19 v3 image storage namespace
+    - Path: repo://src/lib/settings-transfer.ts
+      Note: Step 19 whole-job v3 transfer contract
     - Path: repo://src/lib/settings-ui.test.ts
       Note: Step 17 metadata coverage tests
     - Path: repo://src/lib/settings-ui.ts
@@ -45,6 +49,8 @@ RelatedFiles:
       Note: |-
         Step 14 design outcome
         Step 15 direct reMarkable delivery source
+    - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-cam-recipes-explainers.png
+      Note: Step 19 browser acceptance screenshot
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-frame-margins.png
       Note: Step 13 browser verification
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-preview.png
@@ -63,6 +69,7 @@ LastUpdated: 2026-08-01T20:09:00-04:00
 WhatFor: Preserve the research trail and implementation review guidance for MILL-06.
 WhenToUse: Read before continuing ticket research or implementing the proposed cutout.
 ---
+
 
 
 
@@ -1146,3 +1153,56 @@ I added local/importable named recipes with strict scope enforcement, plus live 
 ### Technical details
 - Recipe namespace: `abs-bicolor-v-engraver/cam-presets/v1/`.
 - Recipe envelope: `abs-bicolor-v-engraver/cam-preset`, version 1; existing full image settings remain `abs-bicolor-v-engraver/settings`, version 2.
+
+## Step 19: Complete software/browser acceptance and version the expanded whole-job schema
+
+The new T1 setting is part of the full per-image job contract, so I advanced the whole-job transfer and image-storage namespace from v2 to v3 rather than silently accepting an incomplete v2 payload. I then ran a fresh browser acceptance exercise across navigation, help, explainers, scoped recipes, T1 generation, and image restoration.
+
+### Prompt Context
+
+**User prompt (verbatim):** See Step 16 active implementation goal.
+
+**Assistant interpretation:** Produce fresh evidence that every requested software outcome works together and preserve clear version boundaries for changed persisted settings.
+
+**Inferred user intent:** Avoid a visually polished UI whose settings, generated output, or restore behavior are inconsistent.
+
+**Commit (code):** Pending final validation/documentation commit.
+
+### What I did
+- Bumped whole-job settings envelope from v2 to v3 and image-settings localStorage namespace from v2 to v3 because `flatClearingStepdown` is now required.
+- Replaced the one hard-coded whole-job version in scoped-recipe application with the exported transfer version constant.
+- Ran `pnpm test && pnpm build`: 7 test files / 34 tests passed; TypeScript no-emit typecheck and Vite production build passed.
+- Browser-tested five workspace navigation buttons, 49 detailed help disclosures, three live explainer cards, 0.05mm T1 ladder values (-0.050/-0.100/-0.120), scoped recipe save/diff/export JSON, and generated G-code containing `[T1]Flat Clearing`.
+- Browser-tested image-specific persistence by setting `flatClearingStepdown=0.07`, reloading the cat sample, and observing `0.07` plus “Restored settings previously saved for this image.”
+- Confirmed LAN preview still answered HTTP 200; captured `images/ui-cam-recipes-explainers.png`.
+
+### Why
+- Changing required whole-job fields without a namespace/version bump would cause old data to be treated as malformed under the same advertised contract.
+
+### What worked
+- The browser generated 1,864 toolpaths with the multipass T1 feature enabled and surfaced no error status.
+- Scoped export parsed as `t1-clearing`, and its pre-load diff correctly reported no changes when saved from current values.
+- The per-image setting survived a full page reload under the v3 key.
+
+### What didn't work
+- No acceptance failure occurred. The only implementation failure in the preceding step was the corrected HTMLElement/HTMLDivElement type mismatch documented in Step 18.
+
+### What I learned
+- Whole-job restoration and reusable recipes need separate versions/lifecycles: the former must be complete and exact; the latter is intentionally partial but scope-validated.
+
+### What was tricky to build
+- The acceptance run needed remove its temporary `Smoke T1` local recipe after verification so test state would not present as an operator-created preset.
+
+### What warrants a second pair of eyes
+- Physical simulator/air-cut/coupon validation is still required before relying on any selected T1 depth increment, frame retention, feeds, or motion heights.
+
+### What should be done in the future
+- No software feature remains planned for this goal; future work should be physical CNC validation and, if desired, a user-requested refinement after on-device review.
+
+### Code review instructions
+- Run `pnpm test && pnpm build`; visit the LAN URL and repeat the Step 19 acceptance settings.
+- Review v3 constants in `src/lib/settings-transfer.ts` and `src/lib/settings-storage.ts`, then check the generated T1 toolpath in the G-code visualizer.
+
+### Technical details
+- Full-job format/storage: `abs-bicolor-v-engraver/settings` v3 and `abs-bicolor-v-engraver/image-settings/v3/<fingerprint>`.
+- Browser smoke: 5 workspaces, 49 help disclosures, 3 explainers; T1 ladder -0.050/-0.100/-0.120mm; generated status 1,864 toolpaths; LAN HTTP 200.
