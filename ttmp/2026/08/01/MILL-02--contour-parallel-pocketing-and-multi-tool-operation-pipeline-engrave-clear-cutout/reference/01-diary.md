@@ -231,3 +231,45 @@ Also answered the toolchange/probe question with evidence: grepping MakeraBadge.
 
 ### Technical details
 - Series stats: filled-square 768 lines/1m36s; square-outline 823/4m3s; filled-circle 2339/2m2s; ring 8330/5m36s; dumbbell 934/58s; stripes 608/2m44s; checkerboard 8120/17m40s; star 4601/3m24s; text 5933/10m37s.
+
+## Step 5: Simulator "weird jumps" — duplicate rings fixed, stay-down linking added
+
+The user simulated the dumbbell file in MakeraStudio and saw weird jumps on the beginning concentric rectangles (the bar region), then correctly guessed the visible motion was the Z retracts. Investigation with `scripts/02-find-cut-jumps.py` found both a benign cause and a real bug. Benign: every ring plunged and retracted separately — ~20 lift/travel/plunge cycles inside a 1.2mm-wide bar looks chaotic in a simulator. Real bug: **byte-identical duplicate rings** (the same rectangle cut twice, e.g. old file lines 32–44) because the 30° V-bit's 45% stepover is 0.029mm — *below one pixel* (0.045mm) — so adjacent iso-contour levels quantized to the same contour.
+
+Fixes in `makeContourPocketPaths`: (1) floor the ring step at 1px and skip levels whose region area didn't shrink — level sets are nested, so equal area proves an identical contour; (2) stay-down linking — when the straight connector from one ring's end to the next ring's start stays inside the tool-center-legal region (`dist >= rTool + 0.5px`, sampled), feed there at depth instead of retracting; safe because a constant-depth pocket clears that material anyway.
+
+### Prompt Context
+
+**User prompt (verbatim):** "look at the generated dumbbell path, the simulater in makera studio shows some weird jumps on that beginning concentric square" (mid-turn: "v-bit 30 degrees btw", "oh i think it's just the lifting up in z")
+
+**Assistant interpretation:** Diagnose the jumpy motion at the start of the dumbbell file; the user suspects it's just retracts.
+
+**Inferred user intent:** Confidence the file is safe/correct to run, and cleaner toolpaths if something is actually wrong.
+
+### What I did
+- `scripts/02-find-cut-jumps.py` (ticket): per-plunge segment-length and ring-closure analyzer.
+- `src/lib/pocketing.ts`: 1px step floor + area-based level dedupe + `connectorInsidePocket` stay-down linking (opt-out via `{ link: false }` for structural tests).
+- Tests: +2 (no duplicate rings at sub-pixel stepover; disk pocket links into exactly 1 path with identical total geometry) — 11 passing.
+- Regenerated the series (`pnpm gen:testgcode`).
+
+### Why
+- Area equality as the dedupe key is exact, not heuristic: `{dist>=l+s} ⊆ {dist>=l}`, so unchanged area ⇒ identical set.
+
+### What worked
+- Dumbbell: 39 → 13 plunges; the bar region is now one continuous pass. Whole series got faster: checkerboard 17m40s → 10m33s, text 10m37s → 7m8s, ring 5m36s → 2m57s, dumbbell 58s → 38s.
+
+### What didn't work
+- N/A — first implementation passed tests and produced clean output.
+
+### What I learned
+- MakeraStudio's simulator is a good lint: it made sub-pixel quantization artifacts visible that our own viewer (which draws rings, not the retract choreography) de-emphasized.
+
+### What was tricky to build
+- Choosing the linking safety predicate: connector must stay in the *tool-center-legal* region (not merely inside the mask), otherwise the shank-side of the V could gouge the pocket wall on concave shapes. Sampling every half-pixel against the existing distance field made this a 15-line check.
+
+### What warrants a second pair of eyes
+- Stay-down linking merges rings across offset levels; verify on the machine that the short at-depth connectors don't leave visible witness marks in the gold cap (they shouldn't — same depth — but ABS can smear).
+- The regenerated files are NOT yet on the SD card (it was ejected before this fix) — re-copy before cutting.
+
+### Code review instructions
+- `src/lib/pocketing.ts`: dedupe loop + `connectorInsidePocket`; validate `pnpm test && pnpm gen:testgcode`, then `python3 <ticket>/scripts/02-find-cut-jumps.py gcode-tests/pattern-dumbbell-20mm.nc` → 13 plunges, no OPEN RING findings.

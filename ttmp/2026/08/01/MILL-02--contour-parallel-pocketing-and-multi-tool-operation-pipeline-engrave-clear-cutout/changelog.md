@@ -41,3 +41,12 @@ Step 4: extracted shared pipeline library (runPipeline), pure-math test patterns
 - /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/scripts/generate-test-gcode.ts — CLI batch generator
 - /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/lib/pipeline.ts — Shared DOM-free pipeline
 
+
+## 2026-08-01
+
+Step 5: fixed duplicate contour rings (sub-pixel stepover quantization) and added stay-down ring linking; dumbbell 39->13 plunges, series est times down ~35%
+
+### Related Files
+
+- /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/lib/pocketing.ts — Dedupe + stay-down linking
+

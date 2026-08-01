@@ -88,7 +88,7 @@ describe("makeContourPocketPaths", () => {
     const size = 64;
     const model = testModel(size, size);
     const dist = chamferDistance(diskMask(size, 25), size, size, false);
-    const paths = makeContourPocketPaths(dist, model, 2, 4, 0.12);
+    const paths = makeContourPocketPaths(dist, model, 2, 4, 0.12, { link: false });
     expect(paths.length).toBeGreaterThan(3);
     for (const p of paths) {
       expect(p.closed).toBe(true);
@@ -102,6 +102,28 @@ describe("makeContourPocketPaths", () => {
     const spanX = (points: { x: number }[]) =>
       Math.max(...points.map((p) => p.x)) - Math.min(...points.map((p) => p.x));
     expect(spanX(paths[0].points)).toBeLessThan(spanX(paths[paths.length - 1].points));
+  });
+
+  it("never emits duplicate rings at sub-pixel stepover", () => {
+    const size = 64;
+    const model = testModel(size, size);
+    const dist = chamferDistance(diskMask(size, 20), size, size, false);
+    const paths = makeContourPocketPaths(dist, model, 2, 0.3, 0.12, { link: false });
+    const serialized = paths.map((p) => p.points.map((q) => `${q.x},${q.y}`).join(";"));
+    expect(new Set(serialized).size).toBe(serialized.length);
+  });
+
+  it("links concentric rings into a stay-down pass on a convex pocket", () => {
+    const size = 64;
+    const model = testModel(size, size);
+    const dist = chamferDistance(diskMask(size, 25), size, size, false);
+    const unlinked = makeContourPocketPaths(dist, model, 2, 4, 0.12, { link: false });
+    const linked = makeContourPocketPaths(dist, model, 2, 4, 0.12);
+    expect(unlinked.length).toBeGreaterThan(3);
+    expect(linked.length).toBe(1);
+    // same total geometry, just merged
+    const count = (paths: typeof linked) => paths.reduce((n, p) => n + p.points.length, 0);
+    expect(count(linked)).toBe(count(unlinked));
   });
 
   it("returns no paths when the tool cannot fit", () => {

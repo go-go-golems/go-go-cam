@@ -1,6 +1,6 @@
 import type { Model, Point, Toolpath } from "./types";
 import { simplifyClosedLoop, traceBoundaryLoops } from "./geometry";
-import { sortPathsNearest, pixelToMachine } from "./toolpath";
+import { machineToPixel, sortPathsNearest, pixelToMachine } from "./toolpath";
 
 /**
  * Iso-contour loops of a distance field at `level` (pixels): the boundary of
@@ -29,20 +29,53 @@ export function extractIsoContours(
  * boundary spaced by the stepover, ordered innermost-first so the final ring
  * is the finish pass along the wall (design DR-2).
  */
+/**
+ * True when the straight tool-center move from `a` to `b` (machine coords)
+ * stays inside the region the tool may occupy, so the bit can feed there at
+ * pocket depth instead of retracting.
+ */
+function connectorInsidePocket(
+  dist: Float32Array,
+  model: Model,
+  toolRadiusPx: number,
+  a: Point,
+  b: Point
+): boolean {
+  const pa = machineToPixel(a.x, a.y, model);
+  const pb = machineToPixel(b.x, b.y, model);
+  const lengthPx = Math.hypot(pb.x - pa.x, pb.y - pa.y);
+  const samples = Math.max(2, Math.ceil(lengthPx * 2));
+  for (let i = 0; i <= samples; i++) {
+    const t = i / samples;
+    const x = Math.min(model.width - 1, Math.max(0, Math.floor(pa.x + (pb.x - pa.x) * t)));
+    const y = Math.min(model.height - 1, Math.max(0, Math.floor(pa.y + (pb.y - pa.y) * t)));
+    if (dist[y * model.width + x] < toolRadiusPx + 0.5) return false;
+  }
+  return true;
+}
+
 export function makeContourPocketPaths(
   dist: Float32Array,
   model: Model,
   toolRadiusPx: number,
   stepoverPx: number,
-  depth: number
+  depth: number,
+  options: { link?: boolean } = {}
 ): Toolpath[] {
-  const step = Math.max(0.5, stepoverPx);
+  // Sub-pixel steps are meaningless on the pixel grid: consecutive levels
+  // quantize to the same contour and the tool re-cuts identical rings
+  // (observed as "weird jumps" in the MakeraStudio simulator).
+  const step = Math.max(1, stepoverPx);
   const rings: Point[][][] = [];
-  // The 0.5px inset mirrors the centerMask definition in processAndGenerate.
+  let previousArea = -1;
+  // The 0.5px inset mirrors the centerMask definition in the pipeline.
   for (let level = toolRadiusPx + 0.5; ; level += step) {
-    const { loops } = extractIsoContours(dist, model.width, model.height, level);
+    const { loops, area } = extractIsoContours(dist, model.width, model.height, level);
     if (!loops.length) break;
-    rings.push(loops);
+    // Level sets are nested, so an unchanged area means an identical
+    // contour — skip the duplicate ring.
+    if (area !== previousArea) rings.push(loops);
+    previousArea = area;
     if (rings.length > 10000) throw new Error("Contour pocketing exceeded 10,000 rings; check stepover.");
   }
 
@@ -74,5 +107,26 @@ export function makeContourPocketPaths(
     }
     paths.push(...ordered);
   }
-  return paths;
+
+  if (options.link === false) return paths;
+
+  // Stay-down linking: feed to the next ring at depth when the connector
+  // stays inside the pocket, instead of retract + rapid + plunge. Safe for a
+  // constant-depth pocket — the connector crosses material that is being
+  // cleared to this exact depth anyway.
+  const linked: Toolpath[] = [];
+  for (const path of paths) {
+    const previous = linked[linked.length - 1];
+    if (previous) {
+      const from = previous.points[previous.points.length - 1];
+      const to = path.points[0];
+      if (connectorInsidePocket(dist, model, toolRadiusPx, from, to)) {
+        previous.points.push(...path.points);
+        previous.closed = false;
+        continue;
+      }
+    }
+    linked.push({ ...path, points: path.points.slice() });
+  }
+  return linked;
 }
