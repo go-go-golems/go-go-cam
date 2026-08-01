@@ -22,3 +22,12 @@ Step 2: implemented pocketing.ts, operations.ts, fillHoles, rest machining, cuto
 
 - /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/lib/operations.ts — Program emitter
 
+
+## 2026-08-01
+
+Step 3: full MakeraStudio prelude (SCHEMA/MACHINE/MATERIAL/STOCK/ORIGIN/TIME + full TOOL geometry, example-file defaults); TIME computed via parser round-trip; 9 tests green
+
+### Related Files
+
+- /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/lib/operations.ts — Header emission with MKR_DEFAULTS
+

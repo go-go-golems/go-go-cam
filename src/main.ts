@@ -329,6 +329,7 @@ async function processAndGenerate(): Promise<void> {
       name: `${settings.vAngle}deg V-bit (tip cut ${settings.cutWidth.toFixed(2)}mm)`,
       type: "engraving",
       diameter: 3.175,
+      halfAngle: settings.vAngle / 2,
       spindleRpm: settings.spindleRpm,
       feedXY: settings.feedXY,
       feedPlunge: settings.feedPlunge

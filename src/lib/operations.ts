@@ -1,5 +1,6 @@
 import type { Model, Toolpath } from "./types";
 import { clamp, fmt } from "./utils";
+import { parseGcode } from "../gcode/parser";
 
 export interface ToolSpec {
   /** T number emitted in the program. */
@@ -9,9 +10,37 @@ export interface ToolSpec {
   /** Cutting diameter in mm (flat) or shank diameter (engraving). */
   diameter: number;
   tipDiameter?: number;
+  /** V-bit half angle in degrees (engraving tools). */
+  halfAngle?: number;
+  /** Makera product id for the MKR TOOL line; defaults per type. */
+  id?: string;
   spindleRpm: number;
   feedXY: number;
   feedPlunge: number;
+}
+
+/**
+ * Header defaults copied from testdata/MakeraBadge.nc (a real MakeraStudio
+ * export) so generated jobs look native to Makera tooling.
+ */
+const MKR_DEFAULTS = {
+  schema: "v=1.0.0",
+  machine: "id=Z1|name=Makera Z1",
+  material: "id=1214321200100001|name3=Bicolor Stock - Gold on Black / 1.3mm(100mm*200mm)|name1=Plastic|name2=ABS",
+  stockLength: 100,
+  stockWidth: 100,
+  stockDiameter: 1,
+  originType: "topFrontLeft",
+  toolIds: { flat: "112111313812", engraving: "122111033830" } as const
+};
+
+function mkrToolLine(tool: ToolSpec): string {
+  const isFlat = tool.type === "flat";
+  const tip = tool.tipDiameter ?? (isFlat ? tool.diameter : 0.3);
+  return `;@MKR|TOOL|number=${tool.number}|id=${tool.id ?? MKR_DEFAULTS.toolIds[tool.type]}` +
+    `|name=${tool.name}|type=${isFlat ? "Flat End" : "Engraving"}` +
+    `|handlediameter=3.175|sticklength=0|shoulderlength=${isFlat ? 12 : 0}|flutelength=${isFlat ? 12 : 5}` +
+    `|diameter=${fmt(tool.diameter)}|tipdiameter=${fmt(tip)}|cornerradius=0|angle=0|halfAngle=${fmt(tool.halfAngle ?? 0)}`;
 }
 
 export interface Operation {
@@ -45,23 +74,10 @@ export function generateProgram(ops: Operation[], model: Model, jobName: string)
   const s = model.settings;
   const safeAbsolute = s.surfaceZ + s.safeZ;
   const active = ops.filter((op) => op.paths.length > 0);
+  // Body is built first so the header's TIME line can carry its actual
+  // motion-time estimate (computed by round-tripping through our parser).
   const lines: string[] = [];
 
-  lines.push(";@MKR|BEGIN");
-  lines.push(`;@MKR|CAM|id=abs-bicolor-v-engraver|name=ABS Bicolor V-Engraver`);
-  lines.push(";@MKR|UNIT|value=mm");
-  const seenTools = new Map<number, ToolSpec>();
-  for (const op of active) seenTools.set(op.tool.number, op.tool);
-  for (const tool of seenTools.values()) {
-    lines.push(
-      `;@MKR|TOOL|number=${tool.number}|name=${tool.name}|type=${tool.type === "flat" ? "Flat End" : "Engraving"}` +
-      `|diameter=${fmt(tool.diameter)}${tool.tipDiameter !== undefined ? `|tipdiameter=${fmt(tool.tipDiameter)}` : ""}`
-    );
-  }
-  active.forEach((op, i) => {
-    lines.push(`;@MKR|TOOLPATH|number=${i + 1}|tool_number=${op.tool.number}|name=${op.name}`);
-  });
-  lines.push(";@MKR|END");
   lines.push(`(${jobName.replace(/[()]/g, "")})`);
   lines.push("G21", "G90", "G17", "G94");
   lines.push(`G0 Z${fmt(safeAbsolute)}`);
@@ -116,5 +132,35 @@ export function generateProgram(ops: Operation[], model: Model, jobName: string)
 
   if (spindleOn) lines.push("M5");
   lines.push("G28", "M2", "");
-  return lines.join("\n");
+
+  const body = lines.join("\n");
+  const estimatedSeconds = Math.round(parseGcode(body).estimatedMinutes * 60);
+
+  const header: string[] = [];
+  header.push(";@MKR|BEGIN");
+  header.push(`;@MKR|SCHEMA|${MKR_DEFAULTS.schema}`);
+  header.push(`;@MKR|MACHINE|${MKR_DEFAULTS.machine}`);
+  header.push(`;@MKR|MATERIAL|${MKR_DEFAULTS.material}`);
+  header.push(
+    `;@MKR|STOCK|id=cuboid|length=${fmt(MKR_DEFAULTS.stockLength)}|width=${fmt(MKR_DEFAULTS.stockWidth)}` +
+    `|height=${fmt(s.stockThickness)}|diameter=${fmt(MKR_DEFAULTS.stockDiameter)}`
+  );
+  header.push(
+    `;@MKR|ORIGIN|id=0|type_name=${MKR_DEFAULTS.originType}` +
+    `|x=${fmt(-MKR_DEFAULTS.stockLength / 2)}|y=${fmt(-MKR_DEFAULTS.stockWidth / 2)}|z=${fmt(s.stockThickness / 2)}`
+  );
+  header.push(";@MKR|CAM|id=abs-bicolor-v-engraver|name=ABS Bicolor V-Engraver|v=0.1.0");
+  header.push(";@MKR|UNIT|value=mm");
+  const seenTools = new Map<number, ToolSpec>();
+  for (const op of active) seenTools.set(op.tool.number, op.tool);
+  for (const tool of [...seenTools.values()].sort((a, b) => a.number - b.number)) {
+    header.push(mkrToolLine(tool));
+  }
+  header.push(`;@MKR|TIME|seconds=${estimatedSeconds}`);
+  active.forEach((op, i) => {
+    header.push(`;@MKR|TOOLPATH|number=${i + 1}|tool_number=${op.tool.number}|name=${op.name}`);
+  });
+  header.push(";@MKR|END");
+
+  return header.join("\n") + "\n" + body;
 }

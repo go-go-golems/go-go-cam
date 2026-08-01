@@ -142,3 +142,38 @@ Mid-implementation the user asked for test-pattern sample images; implemented as
 ### Technical details
 - Emission order: engrave (T2) → flat clearing (T1) → cutout (T1): two tool changes total, matching the badge job's convention of engraving first.
 - Test-pattern IDs: filled-square, square-outline, filled-circle, ring, dumbbell, stripes, checkerboard, star, text.
+
+## Step 3: Full MakeraBadge-style prelude with example-file defaults
+
+The user asked whether generated programs carry the same prelude as the real Makera file, then asked for the example file's values as defaults. `generateProgram` now emits the complete header in MakeraStudio's exact order — BEGIN, SCHEMA v=1.0.0, MACHINE (Z1), MATERIAL (the bicolor ABS line verbatim), STOCK (cuboid 100×100×stockThickness), ORIGIN (topFrontLeft, x/y at stock center-negative, z = stockThickness/2, reproducing the badge's z=0.65 for 1.3mm stock), CAM, UNIT, full-geometry TOOL lines (including the real Makera product ids 112111313812/122111033830 as per-type defaults, handlediameter/flutelength/halfAngle fields), a computed TIME line, TOOLPATH mappings, END.
+
+The body is now built before the header so TIME can be computed by round-tripping the body through our own parser (`parseGcode(body).estimatedMinutes`) — the header estimate and the visualizer display can never disagree.
+
+### Prompt Context
+
+**User prompt (verbatim):** "add the same default settings than the given example file, per default." (following "do you add all the prelude and stuff from the makera nc?")
+
+**Assistant interpretation:** Emit the full MakeraBadge.nc-style MKR prelude, using that file's values as defaults.
+
+**Inferred user intent:** Generated jobs should look native to Makera tooling (machine/material/stock/time recognized), not just be mechanically cuttable.
+
+### What I did
+- `operations.ts`: `MKR_DEFAULTS` constant block (schema/machine/material/stock/origin/tool ids copied from testdata/MakeraBadge.nc), `mkrToolLine` with per-type geometry defaults, header assembled after body, TIME from parser round-trip; `ToolSpec` gains `halfAngle`/`id`.
+- `main.ts`: engraver ToolSpec carries `halfAngle = vAngle/2`.
+- Tests: new "emits the full Makera-style prelude" case (header lines verbatim, tool sorting, ids, TIME > 0, parser metadata round-trip) — 9 passing.
+- Browser-verified: generated header preview is line-identical in structure to the badge file; visualizer summary now shows machine/material/stock/estimatedTime for our own output.
+
+### Why
+- ORIGIN z: observed the badge's z=0.65 = height/2 for 1.3mm stock, so we derive z from the live stockThickness setting instead of hardcoding.
+
+### What worked / What didn't work
+- Worked first try after one foreseeable fix: the vitest `testModel` Settings cast lacked `stockThickness`, which the header now reads — added to the fixture before running.
+
+### What warrants a second pair of eyes
+- The MATERIAL line and tool product ids are literal copies of the example; if the user changes stock or bits, the header will claim the wrong material/tool ids until we expose them as settings.
+
+### What should be done in the future
+- Optional settings UI for machine/material/stock XY size; thumbnail block emission.
+
+### Code review instructions
+- `src/lib/operations.ts` (MKR_DEFAULTS, mkrToolLine, header assembly); validate with `pnpm exec vitest run` and by diffing a generated file's header against testdata/MakeraBadge.nc lines 1–15.

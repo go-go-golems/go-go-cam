@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { chamferDistance } from "./imaging";
 import { extractIsoContours, makeContourPocketPaths } from "./pocketing";
 import { makePassLadder, generateProgram, type Operation, type ToolSpec } from "./operations";
+import { parseGcode } from "../gcode/parser";
 import type { Model, Settings } from "./types";
 
 function diskMask(size: number, radius: number): Uint8Array {
@@ -36,7 +37,8 @@ function testModel(width: number, height: number): Model {
     mirrorY: false,
     surfaceZ: 0,
     safeZ: 3,
-    emitSpindle: true
+    emitSpindle: true,
+    stockThickness: 1.3
   } as Settings;
   return {
     settings,
@@ -160,6 +162,39 @@ describe("generateProgram", () => {
     expect(lines.filter((l) => l === "G1 Z-1.5 F150").length).toBe(1);
     expect(lines[lines.length - 3]).toBe("G28");
     expect(lines[lines.length - 2]).toBe("M2");
+  });
+
+  it("emits the full Makera-style prelude with example-file defaults", () => {
+    const model = testModel(32, 32);
+    const gcode = generateProgram(
+      [{ name: "[T2]Engrave", tool: { ...engraver, halfAngle: 15 }, paths: [square(0.12)], passDepths: [-0.12] },
+       { name: "[T1]Cutout", tool: flat, paths: [square(1.5)], passDepths: makePassLadder(1.5, 0.5) }],
+      model, "test job"
+    );
+    const lines = gcode.split("\n");
+    expect(lines[0]).toBe(";@MKR|BEGIN");
+    expect(lines).toContain(";@MKR|SCHEMA|v=1.0.0");
+    expect(lines).toContain(";@MKR|MACHINE|id=Z1|name=Makera Z1");
+    expect(lines).toContain(
+      ";@MKR|MATERIAL|id=1214321200100001|name3=Bicolor Stock - Gold on Black / 1.3mm(100mm*200mm)|name1=Plastic|name2=ABS"
+    );
+    expect(lines).toContain(";@MKR|STOCK|id=cuboid|length=100|width=100|height=1.3|diameter=1");
+    expect(lines).toContain(";@MKR|ORIGIN|id=0|type_name=topFrontLeft|x=-50|y=-50|z=0.65");
+    const time = lines.find((l) => l.startsWith(";@MKR|TIME|seconds="));
+    expect(time).toBeDefined();
+    expect(Number(time!.split("=")[1])).toBeGreaterThan(0);
+    // tools sorted ascending with full geometry fields and default product ids
+    const toolLines = lines.filter((l) => l.startsWith(";@MKR|TOOL|"));
+    expect(toolLines[0]).toContain("number=1|id=112111313812");
+    expect(toolLines[0]).toContain("shoulderlength=12|flutelength=12");
+    expect(toolLines[1]).toContain("number=2|id=122111033830");
+    expect(toolLines[1]).toContain("tipdiameter=0.3");
+    expect(toolLines[1]).toContain("halfAngle=15");
+    // round-trip: our own parser surfaces the metadata
+    const parsed = parseGcode(gcode);
+    expect(parsed.metadata.machine).toBe("Makera Z1");
+    expect(parsed.metadata.stock).toBe("100 × 100 × 1.3 mm");
+    expect(parsed.tools.get(1)?.name).toBe("3.175mm Flat");
   });
 
   it("skips empty operations entirely", () => {
