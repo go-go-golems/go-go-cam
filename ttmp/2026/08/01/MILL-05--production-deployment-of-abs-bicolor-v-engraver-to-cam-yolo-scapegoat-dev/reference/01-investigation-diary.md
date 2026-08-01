@@ -277,7 +277,7 @@ The DNS Terraform repository already declares the `*.yolo.scapegoat.dev` wildcar
 
 **Inferred user intent:** Make the production rollout reviewable and repeatable through the existing Argo/Vault platform instead of relying on manual `kubectl set image` operations.
 
-**Commit (code):** Pending repository-specific commits; the k3s working tree is on an existing `hotfix/datalab-rollback` branch and has unrelated changes, so changes must be committed selectively or moved to a dedicated branch before handoff.
+**Commit (code):** `90433941ef752a7649fa6284bb851f91bb2f87b8` — "Add CAM production GitOps deployment" on the dedicated `mill-05-cam-deployment` branch. The Terraform role-map entry is `828ec7b3b5ff6bad0fae8dd1ae8f60d722265b61` — "Add CAM GitHub Actions GitOps role".
 
 ### What I did
 
@@ -303,8 +303,16 @@ The DNS Terraform repository already declares the `*.yolo.scapegoat.dev` wildcar
 
 ### What didn't work
 
-- No cluster commit has been made yet because the k3s checkout is on `hotfix/datalab-rollback` and contains unrelated untracked ticket material. The correct next action is to preserve those changes and commit only the MILL-05 paths on an appropriate branch.
-- Terraform's GitHub Actions role map is a second authority for GitHub Actions roles. It still needs a selective `cam` entry or an explicit decision to use the k3s declaration/script authority only.
+- The first validation commands were run from the source repository instead of the k3s repository and failed:
+
+  ```text
+  error: must build at directory: not a valid directory: evalsymlink failure on 'gitops/kustomize/cam' : lstat /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/gitops: no such file or directory
+  bash: scripts/validate_gitops.sh: No such file or directory
+  ```
+
+  Re-running from `/home/manuel/code/wesen/2026-03-27--hetzner-k3s` passed.
+- The first attempt to check multiple docmgr tasks included a whitespace-separated extra argument and failed with `Error: Too many arguments`; `--id 1,2` is the correct form.
+- Terraform's GitHub Actions role map is a second authority for GitHub Actions roles. A selective `cam` entry was added and committed separately while preserving unrelated local Terraform changes.
 
 ### What I learned
 
@@ -346,3 +354,94 @@ The DNS Terraform repository already declares the `*.yolo.scapegoat.dev` wildcar
 - Source image: `ghcr.io/go-go-golems/go-go-cam:sha-<7-char-commit>`.
 - Runtime secret path: `kv/apps/cam/prod/image-pull`.
 - CI credential path: `kv/data/ci/github/cam/gitops-pr-app`.
+
+## Step 4: Validate rendered manifests and preserve repository boundaries
+
+The source artifact and cluster package now pass their local validation boundaries. The k3s package renders successfully, the cluster-wide GitOps validator reports zero violations across 51 packages, and the Terraform role-map addition passes `terraform fmt -check`. The live rollout is intentionally not claimed yet: the source workflow has not been pushed/released through GitHub in this session, and Vault values plus the first Argo Application bootstrap still require operator-controlled production actions.
+
+The cluster checkout had unrelated work on its original hotfix branch. To avoid mixing that work into the deployment commit, the CAM package was committed on `mill-05-cam-deployment`, while unrelated modified and untracked files were left in place. Terraform received its role-map entry in a separate focused commit after stashing and restoring the unrelated Agentlogic hostname change.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Validate the implemented ticket artifacts, update bookkeeping, and preserve unrelated repository changes while preparing the remaining production handoff.
+
+**Inferred user intent:** Have a reviewable implementation with clear evidence of what is complete and what still requires live credentials or operator approval.
+
+**Commit (code):** `6bd53df54fa2aa8fea48ff19f3c14016c375ddf2` — "Document MILL-05 CAM production deployment". Related implementation commits: `0a11e150e99976234de4aa34bc14ffb8c616c4c2`, `90433941ef752a7649fa6284bb851f91bb2f87b8`, and `828ec7b3b5ff6bad0fae8dd1ae8f60d722265b61`.
+
+### What I did
+
+- Rendered `gitops/kustomize/cam` from the k3s repository.
+- Ran `kubectl apply --dry-run=client` against the rendered package.
+- Ran `bash scripts/validate_gitops.sh` from the correct k3s repository.
+- Confirmed the validator checked 51 packages with zero violations.
+- Added docmgr file relations, changelog entries, and checked the research/container tasks.
+- Added vocabulary entries for `deployment`, `gitops`, and `kubernetes` after `docmgr doctor` reported them as unknown.
+- Ran `docmgr doctor --ticket MILL-05 --stale-after 30` successfully.
+- Committed the ticket documentation and source archive.
+
+### Why
+
+- Rendered manifests are the evidence that Kustomize composition works; source YAML alone is not enough.
+- The cluster validator enforces load-bearing invariants and catches a package that does not render.
+- Docmgr vocabulary and relations make the ticket searchable and maintainable.
+- Separate commits preserve the ownership boundaries between application, cluster, Terraform, and docs.
+
+### What worked
+
+- CAM rendered as Namespace, ServiceAccount, Service, Deployment, Ingress, NetworkPolicy, VaultAuth, VaultConnection, and VaultStaticSecret.
+- Dry-run validation accepted every rendered object.
+- The full cluster validator passed:
+
+  ```text
+  Packages checked: 51
+  Violations:       0
+  RESULT: PASS — all rendered packages satisfy the GitOps invariants.
+  ```
+
+- Terraform role-map formatting passed.
+- `docmgr doctor` passed with no findings.
+
+### What didn't work
+
+- No live HTTPS endpoint was tested because the image has not yet been published through GitHub Actions and the required Vault values have not been verified in this session.
+- No reMarkable upload has been performed yet.
+
+### What I learned
+
+- The implementation is locally complete but operationally gated at secret seeding, source push/CI, GitOps PR merge, and first Application bootstrap.
+- “Deployment package validates” and “production is serving traffic” are separate claims and should remain separate in the handoff.
+
+### What was tricky to build
+
+- The main operational sharp edge was branch hygiene: the cluster checkout carried unrelated work. Creating a dedicated deployment branch and staging exact paths allowed a focused commit without deleting or absorbing that work.
+- The Terraform stash/pop preserved the unrelated Agentlogic hostname change and the untracked Hair Booking directory while still allowing the new role-map entry to receive its own commit.
+
+### What warrants a second pair of eyes
+
+- Confirm the dedicated cluster branch is ready to push/open as a PR rather than merging locally into the existing hotfix branch.
+- Confirm Vault policy/role application and secret seeding before triggering the first main push.
+- Confirm the production certificate and image-pull Secret from the live cluster rather than treating dry-run output as live evidence.
+
+### What should be done in the future
+
+- Push the source and cluster branches through their normal review paths.
+- Seed Vault records without printing values.
+- Run the first GitHub Actions release and inspect the GitOps PR actor.
+- Apply the AppProject/Application bootstrap and complete HTTPS/browser/machine-safety acceptance.
+- Upload the guide, diary, and selected source documents to reMarkable after the final documentation update.
+
+### Code review instructions
+
+- Review commits in this order: source `0a11e15`, cluster `9043394`, Terraform `828ec7b`, docs `6bd53df`.
+- Run source tests/build/container checks, then render the k3s package and run `scripts/validate_gitops.sh` from the k3s repository.
+- Run `docmgr doctor --ticket MILL-05 --stale-after 30` before delivery.
+
+### Technical details
+
+- Source validation: `pnpm test`, `pnpm build`, `docker build --no-cache -t cam:mill-05 .`.
+- GitOps validation: `kubectl kustomize gitops/kustomize/cam`, `kubectl apply --dry-run=client`, `bash scripts/validate_gitops.sh`.
+- Documentation validation: `docmgr doctor --ticket MILL-05 --stale-after 30`.
+- Remaining live evidence: Vault readiness, GitHub Actions run, GitOps PR, Argo `Synced/Healthy`, TLS, browser acceptance, and CNC simulation/air-cut/depth test.

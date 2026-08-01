@@ -40,3 +40,12 @@ Step 4: Added the Terraform GitHub Actions role map entry (commit 828ec7b3b5ff6b
 
 - /home/manuel/code/wesen/terraform/vault/github-actions/envs/k3s/main.tf — Terraform role authority
 
+
+## 2026-08-01
+
+Step 4: Rendered cam, passed cluster validation (51 packages, 0 violations), passed docmgr doctor, and preserved remaining live rollout/upload work.
+
+### Related Files
+
+- /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/ttmp/2026/08/01/MILL-05--production-deployment-of-abs-bicolor-v-engraver-to-cam-yolo-scapegoat-dev/reference/01-investigation-diary.md — Validation evidence and remaining gates
+
