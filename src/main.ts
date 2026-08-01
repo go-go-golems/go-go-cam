@@ -7,6 +7,13 @@ import { runPipeline } from "./lib/pipeline";
 import { clearCanvas, drawMask, drawRgba, drawSourceImage, drawToolpaths } from "./lib/render";
 import { setupGcodeViewer } from "./gcode/viewer";
 import { TEST_PATTERNS, renderTestPattern } from "./lib/patterns";
+import { settingsStorageKeyForImage } from "./lib/settings-storage";
+import {
+  formatSettingsTransfer,
+  parseSettingsTransfer,
+  type SettingsTransfer,
+  type SettingsTransferValues
+} from "./lib/settings-transfer";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -17,6 +24,8 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
 interface AppState {
   image: HTMLImageElement | null;
   imageName: string;
+  /** Content-derived localStorage key for the current source image. */
+  imageSettingsKey: string | null;
   processed: Model | null;
   toolpaths: Toolpath[];
   gcode: string;
@@ -28,6 +37,7 @@ interface AppState {
 const state: AppState = {
   image: null,
   imageName: "cat_sample.png",
+  imageSettingsKey: null,
   processed: null,
   toolpaths: [],
   gcode: "",
@@ -35,6 +45,17 @@ const state: AppState = {
   settings: null,
   warnings: []
 };
+
+const SETTINGS_CONTROL_IDS = [
+  "finishedWidth", "autoCrop", "cropPadding", "invertMask",
+  "maxDimension", "thresholdMode", "manualThreshold", "openRadius", "closeRadius", "minArea", "simplifyTolerance",
+  "vAngle", "capThickness", "breakthrough", "stepover", "rasterDirection",
+  "pocketStrategy", "flatClearing", "flatDiameter", "flatRpm", "flatFeed", "flatPlunge",
+  "cutoutEnable", "cutoutMargin", "stockThickness", "cutoutStepdown", "cutoutOvercut", "cutoutBridgeThickness", "cutoutBridgeSpan",
+  "originX", "originY", "surfaceZ", "safeZ", "approachZ", "hopZ", "hopMaxTravel", "feedXY", "feedPlunge", "spindleRpm", "emitSpindle", "mirrorX", "mirrorY"
+] as const;
+
+const SETTINGS_CONTROL_ID_SET = new Set<string>(SETTINGS_CONTROL_IDS);
 
 function numberValue(id: string, fallback: number): number {
   const value = Number($<HTMLInputElement>(id).value);
@@ -62,17 +83,157 @@ function setBusy(busy: boolean): void {
   }
 }
 
+function settingControl(id: string): HTMLInputElement | HTMLSelectElement {
+  const control = $(id);
+  if (!(control instanceof HTMLInputElement) && !(control instanceof HTMLSelectElement)) {
+    throw new Error(`Settings control #${id} is not an input or select.`);
+  }
+  return control;
+}
+
+function readSettingsTransferControls(): SettingsTransferValues {
+  const settings: SettingsTransferValues = {};
+  for (const id of SETTINGS_CONTROL_IDS) {
+    const control = settingControl(id);
+    if (control instanceof HTMLInputElement && control.type === "checkbox") {
+      settings[id] = control.checked;
+    } else if (control instanceof HTMLInputElement && control.type === "number") {
+      if (!control.value.trim()) throw new Error(`Settings field ${id} is invalid.`);
+      const value = Number(control.value);
+      if (!Number.isFinite(value)) throw new Error(`Settings field ${id} is invalid.`);
+      settings[id] = value;
+    } else {
+      settings[id] = control.value;
+    }
+  }
+  return settings;
+}
+
+function validateSettingsTransfer(transfer: SettingsTransfer): void {
+  const keys = Object.keys(transfer.settings);
+  for (const id of SETTINGS_CONTROL_IDS) {
+    if (!(id in transfer.settings)) throw new Error(`Settings payload is missing ${id}.`);
+  }
+  for (const id of keys) {
+    if (!SETTINGS_CONTROL_ID_SET.has(id)) throw new Error(`Settings payload has an unknown field: ${id}.`);
+  }
+  for (const id of SETTINGS_CONTROL_IDS) {
+    const control = settingControl(id);
+    const value = transfer.settings[id];
+    if (control instanceof HTMLInputElement && control.type === "checkbox") {
+      if (typeof value !== "boolean") throw new Error(`Settings field ${id} must be true or false.`);
+      continue;
+    }
+    if (control instanceof HTMLInputElement && control.type === "number") {
+      if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`Settings field ${id} must be a finite number.`);
+      const min = control.min ? Number(control.min) : -Infinity;
+      const max = control.max ? Number(control.max) : Infinity;
+      if (value < min || value > max) throw new Error(`Settings field ${id} is outside its allowed range.`);
+      continue;
+    }
+    if (typeof value !== "string") throw new Error(`Settings field ${id} must be text.`);
+    if (control instanceof HTMLSelectElement && !Array.from(control.options).some((option) => option.value === value)) {
+      throw new Error(`Settings field ${id} has an unsupported option.`);
+    }
+  }
+}
+
+function applySettingsTransfer(transfer: SettingsTransfer): void {
+  validateSettingsTransfer(transfer);
+  for (const id of SETTINGS_CONTROL_IDS) {
+    const control = settingControl(id);
+    const value = transfer.settings[id];
+    if (control instanceof HTMLInputElement && control.type === "checkbox") {
+      control.checked = value as boolean;
+    } else {
+      control.value = String(value);
+    }
+  }
+  $<HTMLInputElement>("manualThreshold").disabled = $<HTMLSelectElement>("thresholdMode").value !== "manual";
+  updateDerivedHeight();
+}
+
+function saveSettingsForCurrentImage(): void {
+  if (!state.imageSettingsKey) return;
+  try {
+    localStorage.setItem(state.imageSettingsKey, formatSettingsTransfer(readSettingsTransferControls()));
+  } catch (error) {
+    console.warn("Could not save image settings", error);
+  }
+}
+
+function restoreSettingsForImage(storageKey: string): boolean {
+  const text = localStorage.getItem(storageKey);
+  if (!text) return false;
+  try {
+    applySettingsTransfer(parseSettingsTransfer(text));
+    return true;
+  } catch (error) {
+    console.warn("Discarding invalid saved image settings", error);
+    localStorage.removeItem(storageKey);
+    return false;
+  }
+}
+
+async function copySettings(): Promise<void> {
+  try {
+    const text = formatSettingsTransfer(readSettingsTransferControls());
+    const transfer = $<HTMLTextAreaElement>("settingsTransfer");
+    transfer.value = text;
+    saveSettingsForCurrentImage();
+    try {
+      await navigator.clipboard.writeText(text);
+      setStatus("Settings copied to the clipboard.", "ok");
+    } catch {
+      transfer.focus();
+      transfer.select();
+      const copied = document.execCommand("copy");
+      setStatus(
+        copied ? "Settings copied to the clipboard." : "Settings JSON is ready below; copy it manually.",
+        copied ? "ok" : ""
+      );
+    }
+  } catch (error) {
+    setStatus(error instanceof Error ? error.message : String(error), "error");
+  }
+}
+
+async function pasteSettings(): Promise<void> {
+  try {
+    const transfer = $<HTMLTextAreaElement>("settingsTransfer");
+    let text = transfer.value.trim();
+    if (!text) {
+      try {
+        text = await navigator.clipboard.readText();
+      } catch {
+        throw new Error("Paste settings JSON into the text area, then choose Paste settings.");
+      }
+    }
+    const parsed = parseSettingsTransfer(text);
+    applySettingsTransfer(parsed);
+    transfer.value = formatSettingsTransfer(parsed.settings);
+    saveSettingsForCurrentImage();
+    setStatus("Settings pasted. Process the image to apply them.", "ok");
+  } catch (error) {
+    setStatus(error instanceof Error ? error.message : String(error), "error");
+  }
+}
+
 function loadImageDataUrl(dataUrl: string, name: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
       state.image = img;
       state.imageName = name || "artwork.png";
+      state.imageSettingsKey = settingsStorageKeyForImage(dataUrl);
+      const restored = restoreSettingsForImage(state.imageSettingsKey);
       $("imageName").textContent = `${state.imageName} · ${img.naturalWidth} × ${img.naturalHeight}px`;
       updateDerivedHeight(img.naturalWidth, img.naturalHeight);
       drawSourceImage($<HTMLCanvasElement>("sourceCanvas"), img);
       clearGeneratedState();
-      setStatus("Image loaded. Process to create the engraving mask and toolpaths.");
+      setStatus(restored
+        ? "Image loaded. Restored settings previously saved for this image."
+        : "Image loaded. Process to create the engraving mask and toolpaths.");
       resolve();
     };
     img.onerror = () => reject(new Error("The image could not be decoded."));
@@ -252,6 +413,7 @@ async function processAndGenerate(): Promise<void> {
   try {
     const settings = readSettings();
     state.settings = settings;
+    saveSettingsForCurrentImage();
     setStatus("Rasterizing and converting to luminance…");
     await nextFrame();
     const raster = rasterizeImage(state.image, settings.maxDimension);
@@ -324,9 +486,18 @@ $<HTMLInputElement>("imageFile").addEventListener("change", (event) => {
   reader.readAsDataURL(file);
 });
 $("finishedWidth").addEventListener("input", () => updateDerivedHeight());
-$("thresholdMode").addEventListener("change", () => {
-  $<HTMLInputElement>("manualThreshold").disabled = $<HTMLSelectElement>("thresholdMode").value !== "manual";
-});
+for (const id of SETTINGS_CONTROL_IDS) {
+  const control = settingControl(id);
+  control.addEventListener("input", saveSettingsForCurrentImage);
+  control.addEventListener("change", () => {
+    if (id === "thresholdMode") {
+      $<HTMLInputElement>("manualThreshold").disabled = $<HTMLSelectElement>("thresholdMode").value !== "manual";
+    }
+    saveSettingsForCurrentImage();
+  });
+}
+$("copySettings").addEventListener("click", () => { void copySettings(); });
+$("pasteSettings").addEventListener("click", () => { void pasteSettings(); });
 $("processBtn").addEventListener("click", () => { void processAndGenerate(); });
 $("downloadGcode").addEventListener("click", () => downloadText(state.gcode, "text/plain;charset=utf-8", `${sanitizeBaseName(state.imageName)}_abs_vcarve.nc`));
 $("downloadSvg").addEventListener("click", () => downloadText(state.svg, "image/svg+xml;charset=utf-8", `${sanitizeBaseName(state.imageName)}_engraving.svg`));

@@ -100,7 +100,7 @@
   .row label, .check-row label { font-size: 13px; color: #2b3742; }
   .hint { color: var(--muted); font-size: 11px; line-height: 1.35; margin-top: 4px; }
 
-  input[type="number"], input[type="text"], select {
+  input[type="number"], input[type="text"], select, textarea {
     width: 100%;
     border: 1px solid #bfc9d3;
     border-radius: 7px;
@@ -111,7 +111,15 @@
     font-size: 13px;
   }
   input[type="range"] { width: 100%; }
-  input:focus, select:focus, button:focus-visible {
+  textarea {
+    width: 100%;
+    resize: vertical;
+    min-height: 108px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+  input:focus, select:focus, textarea:focus, button:focus-visible {
     outline: 2px solid rgba(30, 95, 138, .32);
     outline-offset: 1px;
   }

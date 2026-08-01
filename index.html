@@ -177,6 +177,17 @@
     </fieldset>
 
     <fieldset>
+      <legend>Settings transfer</legend>
+      <div class="actions">
+        <button id="copySettings" type="button">Copy settings</button>
+        <button id="pasteSettings" type="button">Paste settings</button>
+      </div>
+      <label class="hint" for="settingsTransfer">Settings JSON (copy creates this; paste here when clipboard access is unavailable)</label>
+      <textarea id="settingsTransfer" rows="7" spellcheck="false" placeholder="Paste copied settings JSON here"></textarea>
+      <div class="hint">Settings are automatically saved on this device per image content and restored when the same image is loaded again.</div>
+    </fieldset>
+
+    <fieldset>
       <legend>Machine and G-code</legend>
       <div class="row">
         <label for="originX">Artwork X offset (mm)</label>
