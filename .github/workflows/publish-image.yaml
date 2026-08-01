@@ -1,0 +1,37 @@
+name: publish-image
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  packages: write
+  pull-requests: write
+  id-token: write
+
+concurrency:
+  group: publish-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    uses: go-go-golems/infra-tooling/.github/workflows/publish-ghcr-image.yml@main
+    secrets: inherit
+    with:
+      dockerfile: ./Dockerfile
+      build_context: .
+      setup_go: false
+      test_command: corepack enable && pnpm install --frozen-lockfile && pnpm test
+      gitops_target_config: deploy/gitops-targets.json
+      push_image: ${{ github.event_name != 'pull_request' }}
+      open_gitops_pr: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+      gitops_pr_token_source: github_app
+      vault_role: cam-gitops-pr
+      gitops_app_secret_path: kv/data/ci/github/cam/gitops-pr-app
+      gitops_app_owner: wesen
+      gitops_app_repositories: 2026-03-27--hetzner-k3s
+      tooling_repository: go-go-golems/infra-tooling
+      tooling_ref: main
