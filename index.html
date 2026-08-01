@@ -205,7 +205,37 @@
     </fieldset>
 
     <fieldset>
-      <legend>Settings transfer</legend>
+      <legend>Recipes and settings transfer</legend>
+      <div class="row">
+        <label for="presetScope">Recipe scope</label>
+        <select id="presetScope">
+          <option value="material-and-tools">Material and tools</option>
+          <option value="t1-clearing">T1 clearing</option>
+          <option value="frame-cutout">Frame cutout</option>
+          <option value="machine-safety">Machine safety</option>
+          <option value="image-processing">Image processing</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="presetName">Recipe name</label>
+        <input id="presetName" type="text" maxlength="80" placeholder="e.g. ABS 1.3mm / 3.175mm T1">
+      </div>
+      <div class="actions">
+        <button id="savePreset" type="button">Save recipe</button>
+        <button id="loadPreset" type="button">Load selected</button>
+        <button id="deletePreset" type="button">Delete selected</button>
+      </div>
+      <div class="row">
+        <label for="presetList">Saved recipes</label>
+        <select id="presetList"><option value="">— none selected —</option></select>
+      </div>
+      <label class="hint" for="presetTransfer">Recipe JSON (scope limits which values can change)</label>
+      <textarea id="presetTransfer" rows="5" spellcheck="false" placeholder="Recipe JSON appears here when saved; paste a recipe here to import it"></textarea>
+      <div class="actions">
+        <button id="exportPreset" type="button">Export recipe</button>
+        <button id="importPreset" type="button">Import recipe</button>
+      </div>
+      <div id="presetDiff" class="hint">Choose a saved recipe to see which current values it would change.</div>
       <div class="actions">
         <button id="copySettings" type="button">Copy settings</button>
         <button id="pasteSettings" type="button">Paste settings</button>

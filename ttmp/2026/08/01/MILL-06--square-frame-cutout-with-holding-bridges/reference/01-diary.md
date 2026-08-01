@@ -11,6 +11,10 @@ DocType: reference
 Intent: long-term
 Owners: []
 RelatedFiles:
+    - Path: repo://src/lib/cam-presets.test.ts
+      Note: Step 18 recipe validation tests
+    - Path: repo://src/lib/cam-presets.ts
+      Note: Step 18 scoped recipe contract
     - Path: repo://src/lib/cutout.test.ts
       Note: Step 8 verification evidence (commit 801096a)
     - Path: repo://src/lib/cutout.ts
@@ -59,6 +63,7 @@ LastUpdated: 2026-08-01T20:09:00-04:00
 WhatFor: Preserve the research trail and implementation review guidance for MILL-06.
 WhenToUse: Read before continuing ticket research or implementing the proposed cutout.
 ---
+
 
 
 
@@ -1088,3 +1093,56 @@ I replaced the practical effect of the monolithic sidebar without destabilizing 
 ### Technical details
 - 49 persisted controls are covered by `SETTING_METADATA`; all are assigned to one of five workspaces.
 - Workspace and advanced visibility preferences use `abs-bicolor-v-engraver/active-workspace` and `/show-advanced`, deliberately outside the image-specific settings payload.
+
+## Step 18: Add scoped recipes and bounded live CAM explainers
+
+I added local/importable named recipes with strict scope enforcement, plus live explainers for V-bit geometry, T1 clearing depth, frame state, and machine Z motion. Scoped recipes deliberately leave unrelated controls unchanged and report the exact number/names of settings they would alter before an operator loads them. The existing full per-image JSON setting restoration remains untouched.
+
+### Prompt Context
+
+**User prompt (verbatim):** See Step 16 active implementation goal.
+
+**Assistant interpretation:** Complete the design’s scoped-persistence and explainer portions without misrepresenting browser drawings as physical CNC validation.
+
+**Inferred user intent:** Reuse logical CAM portions safely and see direct consequences of values before generating a job.
+
+**Commit (code):** Pending this focused commit.
+
+### What I did
+- Added `src/lib/cam-presets.ts` with strict v1 envelope parsing, named local storage, scope-to-control selection from shared metadata, diffing, and invalid-record cleanup.
+- Added Recipe workspace controls for save/load/delete/export/import and a review-before-load diff.
+- Added scopes for material/tools, T1 clearing, frame cutout, machine safety, and image processing; imported recipes reject fields outside their declared scope.
+- Added live V-bit cross-section, T1 depth ladder/frame summary, and machine Z-ruler explainers, all labelled as geometry/motion explainers rather than simulation.
+- Added unit tests for scope export/round-trip/diff/rejection.
+- Browser-smoked saving a T1 recipe, recipe selection, and the three explainer cards; confirmed the depth ladder reports -0.100/-0.120mm for default target depth. Removed the test recipe afterward.
+- Ran `pnpm test && pnpm build`: 7 test files / 34 tests passed; typecheck and production build passed.
+
+### Why
+- Full-job copy/paste is correct for restoring an image, but unsafe for reusing just material/T1/frame knowledge because it can include machine coordinates.
+
+### What worked
+- Recipe parsing accepts only metadata-approved controls for its scope, so a T1 recipe cannot silently move `originX`.
+- The existing derived target depth updates the T1 ladder explainer live without new pipeline geometry.
+
+### What didn't work
+- First build failed because a `<section>` inferred as `HTMLElement` was stored in an `HTMLDivElement` map. I corrected the map type to `HTMLElement`; rerun tests/build passed.
+
+### What I learned
+- The metadata registry now acts as a single source for both explanatory text and safe preset boundaries.
+
+### What was tricky to build
+- The diff needs compare DOM-persisted values, not derived Settings values, otherwise a scoped recipe could report a change caused only by derived target-depth fields. It therefore uses `readSettingsTransferControls()`.
+
+### What warrants a second pair of eyes
+- Recipe delete/load controls should receive a final keyboard and narrow-screen UX pass alongside the full visual acceptance run.
+
+### What should be done in the future
+- Complete final browser evidence/screenshots, documentation, and physical CNC validation separately; browser explainers do not replace the latter.
+
+### Code review instructions
+- Review `src/lib/cam-presets.ts`, `src/lib/cam-presets.test.ts`, and recipe handlers in `src/main.ts`.
+- Verify a T1 recipe changes only T1 settings, then inspect all three explainer cards while editing values.
+
+### Technical details
+- Recipe namespace: `abs-bicolor-v-engraver/cam-presets/v1/`.
+- Recipe envelope: `abs-bicolor-v-engraver/cam-preset`, version 1; existing full image settings remain `abs-bicolor-v-engraver/settings`, version 2.

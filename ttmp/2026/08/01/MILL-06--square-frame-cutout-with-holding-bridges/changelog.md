@@ -120,3 +120,12 @@ Added task-oriented CAM workspace navigation, Basic/Advanced visibility, and det
 
 - /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/lib/settings-ui.ts — CAM UI metadata
 
+
+## 2026-08-01
+
+Added scoped CAM recipes and live geometry/depth explainers while retaining per-image full settings restoration.
+
+### Related Files
+
+- /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/lib/cam-presets.ts — Scoped recipe implementation
+

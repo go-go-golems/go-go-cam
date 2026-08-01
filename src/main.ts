@@ -8,7 +8,8 @@ import { clearCanvas, drawMask, drawRgba, drawSourceImage, drawToolpaths } from 
 import { setupGcodeViewer } from "./gcode/viewer";
 import { TEST_PATTERNS, renderTestPattern } from "./lib/patterns";
 import { settingsStorageKeyForImage } from "./lib/settings-storage";
-import { SETTING_METADATA, SETTINGS_CONTROL_IDS, WORKSPACES, type WorkspaceId } from "./lib/settings-ui";
+import { SETTING_METADATA, SETTINGS_CONTROL_IDS, WORKSPACES, type PresetScope, type WorkspaceId } from "./lib/settings-ui";
+import { buildCamPreset, deleteCamPreset, diffCamPreset, formatCamPreset, loadCamPresets, parseCamPreset, saveCamPreset, type CamPreset } from "./lib/cam-presets";
 import {
   formatSettingsTransfer,
   parseSettingsTransfer,
@@ -193,6 +194,34 @@ function setupSettingsWorkspace(): void {
   activate(WORKSPACES.some((workspace) => workspace.id === remembered) ? remembered! : "artwork");
 }
 
+function setupExplainers(): void {
+  const containers: Record<WorkspaceId, HTMLElement | null> = {
+    artwork: null,
+    engraving: document.querySelector('fieldset[data-workspace="engraving"]'),
+    t1: document.querySelector('fieldset[data-workspace="t1"]'),
+    recipes: null,
+    machine: document.querySelector('fieldset[data-workspace="machine"]')
+  };
+  const cards: Partial<Record<WorkspaceId, HTMLElement>> = {};
+  for (const id of ["engraving", "t1", "machine"] as const) {
+    const card = document.createElement("section");
+    card.className = "cam-explainer";
+    containers[id]?.append(card);
+    cards[id] = card;
+  }
+  const render = () => {
+    const s = readSettings();
+    const clearingPasses: number[] = [];
+    for (let depth = s.flatClearingStepdown; depth < s.targetDepth - 1e-9; depth += s.flatClearingStepdown) clearingPasses.push(depth);
+    clearingPasses.push(s.targetDepth);
+    if (cards.engraving) cards.engraving.innerHTML = `<h3>V-bit section</h3><svg viewBox="0 0 240 90" role="img" aria-label="V-bit cross section"><path d="M78 12 L120 75 L162 12" fill="none" stroke="#1e5f8a" stroke-width="3"/><path d="M88 27 H152" stroke="#c74646" stroke-width="4"/><path d="M35 27 H205 M35 75 H205" stroke="#7a8995" stroke-dasharray="4 3"/><text x="5" y="24">surface</text><text x="5" y="72">target</text><text x="166" y="39">${s.cutWidth.toFixed(3)} mm</text></svg><p>Target depth <strong>${s.targetDepth.toFixed(3)}mm</strong> = cap ${s.capThickness.toFixed(3)} + breakthrough ${s.breakthrough.toFixed(3)}. Groove width at that depth: <strong>${s.cutWidth.toFixed(3)}mm</strong>.</p>`;
+    if (cards.t1) cards.t1.innerHTML = `<h3>T1 depth and frame plan</h3><div class="depth-ladder">${clearingPasses.map((depth, index) => `<span style="width:${Math.max(12, depth / s.targetDepth * 100)}%">Pass ${index + 1}: -${depth.toFixed(3)}mm</span>`).join("")}</div><p>T1 clearing reaches unchanged target depth in <strong>${clearingPasses.length} pass${clearingPasses.length === 1 ? "" : "es"}</strong>. ${s.cutoutEnable ? `Frame: ${s.cutoutUseUniformMargin ? `${s.cutoutMargin}mm uniform` : "individual margins"}, R${s.cutoutCornerRadius}mm, bridges retain ${s.cutoutBridgeThickness}mm.` : "Frame cutout is off."}</p><p class="hint">Geometry explainer only — it does not simulate clamps, forces, or retention.</p>`;
+    if (cards.machine) cards.machine.innerHTML = `<h3>Machine Z motion</h3><div class="z-ruler"><span>Safe +${s.safeZ.toFixed(2)}</span><span>Approach +${s.approachZ.toFixed(2)}</span><span>Hop +${s.hopZ.toFixed(2)}</span><span>Surface ${s.surfaceZ.toFixed(2)}</span></div><p>Long travel uses Safe Z; feed plunges begin from Approach Z; short repositions may use Hop Z up to ${s.hopMaxTravel.toFixed(1)}mm.</p><p class="hint">Motion-height explainer only — verify clamps and work offset physically.</p>`;
+  };
+  render();
+  for (const id of SETTINGS_CONTROL_IDS) settingControl(id).addEventListener("input", render);
+}
+
 function updateMarginControlState(): void {
   const uniform = checked("cutoutUseUniformMargin");
   $<HTMLInputElement>("cutoutMargin").disabled = !uniform;
@@ -260,6 +289,84 @@ async function copySettings(): Promise<void> {
   } catch (error) {
     setStatus(error instanceof Error ? error.message : String(error), "error");
   }
+}
+
+function selectedPreset(): CamPreset | null {
+  const name = $<HTMLSelectElement>("presetList").value;
+  return loadCamPresets(localStorage).find((preset) => preset.name === name) ?? null;
+}
+
+function refreshPresetList(selectedName = ""): void {
+  const list = $<HTMLSelectElement>("presetList");
+  const presets = loadCamPresets(localStorage);
+  list.replaceChildren(new Option("— none selected —", ""), ...presets.map((preset) => new Option(`${preset.name} · ${preset.scope}`, preset.name)));
+  list.value = selectedName;
+  updatePresetDiff();
+}
+
+function updatePresetDiff(): void {
+  const preset = selectedPreset();
+  const diff = $("presetDiff");
+  if (!preset) {
+    diff.textContent = "Choose a saved recipe to see which current values it would change.";
+    return;
+  }
+  const changed = diffCamPreset(preset, readSettingsTransferControls());
+  diff.textContent = changed.length
+    ? `${preset.name} would change ${changed.length} value${changed.length === 1 ? "" : "s"}: ${changed.join(", ")}.`
+    : `${preset.name} already matches the current ${preset.scope} values.`;
+}
+
+function saveRecipe(): void {
+  try {
+    const scope = $<HTMLSelectElement>("presetScope").value as PresetScope;
+    const preset = buildCamPreset($<HTMLInputElement>("presetName").value, scope, readSettingsTransferControls());
+    saveCamPreset(localStorage, preset);
+    $<HTMLTextAreaElement>("presetTransfer").value = formatCamPreset(preset);
+    refreshPresetList(preset.name);
+    setStatus(`Saved ${preset.scope} recipe “${preset.name}”.`, "ok");
+  } catch (error) { setStatus(error instanceof Error ? error.message : String(error), "error"); }
+}
+
+function exportRecipe(): void {
+  try {
+    const scope = $<HTMLSelectElement>("presetScope").value as PresetScope;
+    const preset = buildCamPreset($<HTMLInputElement>("presetName").value, scope, readSettingsTransferControls());
+    $<HTMLTextAreaElement>("presetTransfer").value = formatCamPreset(preset);
+    setStatus("Recipe JSON is ready to copy.", "ok");
+  } catch (error) { setStatus(error instanceof Error ? error.message : String(error), "error"); }
+}
+
+function importRecipe(): void {
+  try {
+    const preset = parseCamPreset($<HTMLTextAreaElement>("presetTransfer").value);
+    saveCamPreset(localStorage, preset);
+    $<HTMLSelectElement>("presetScope").value = preset.scope;
+    $<HTMLInputElement>("presetName").value = preset.name;
+    refreshPresetList(preset.name);
+    setStatus(`Imported ${preset.scope} recipe “${preset.name}”. Review its diff before loading.`, "ok");
+  } catch (error) { setStatus(error instanceof Error ? error.message : String(error), "error"); }
+}
+
+function loadRecipe(): void {
+  try {
+    const preset = selectedPreset();
+    if (!preset) throw new Error("Choose a saved recipe first.");
+    const merged = { ...readSettingsTransferControls(), ...preset.values };
+    applySettingsTransfer({ format: "abs-bicolor-v-engraver/settings", version: 2, settings: merged });
+    saveSettingsForCurrentImage();
+    $<HTMLTextAreaElement>("presetTransfer").value = formatCamPreset(preset);
+    updatePresetDiff();
+    setStatus(`Loaded ${preset.scope} recipe “${preset.name}”. Process the image to apply it.`, "ok");
+  } catch (error) { setStatus(error instanceof Error ? error.message : String(error), "error"); }
+}
+
+function removeRecipe(): void {
+  const preset = selectedPreset();
+  if (!preset) { setStatus("Choose a saved recipe first.", "error"); return; }
+  deleteCamPreset(localStorage, preset.name);
+  refreshPresetList();
+  setStatus(`Deleted recipe “${preset.name}”.`, "ok");
 }
 
 async function pasteSettings(): Promise<void> {
@@ -569,6 +676,12 @@ for (const id of SETTINGS_CONTROL_IDS) {
   });
 }
 $("copySettings").addEventListener("click", () => { void copySettings(); });
+$("savePreset").addEventListener("click", saveRecipe);
+$("exportPreset").addEventListener("click", exportRecipe);
+$("importPreset").addEventListener("click", importRecipe);
+$("loadPreset").addEventListener("click", loadRecipe);
+$("deletePreset").addEventListener("click", removeRecipe);
+$("presetList").addEventListener("change", updatePresetDiff);
 $("pasteSettings").addEventListener("click", () => { void pasteSettings(); });
 $("processBtn").addEventListener("click", () => { void processAndGenerate(); });
 $("downloadGcode").addEventListener("click", () => downloadText(state.gcode, "text/plain;charset=utf-8", `${sanitizeBaseName(state.imageName)}_abs_vcarve.nc`));
@@ -579,5 +692,7 @@ $("viewGeneratedGcode").addEventListener("click", () => {
 });
 
 setupSettingsWorkspace();
+setupExplainers();
+refreshPresetList();
 updateMarginControlState();
 loadSample().catch((error) => setStatus(error.message, "error"));
