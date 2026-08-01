@@ -111,3 +111,12 @@ Added separate T1 clearing depth-per-pass ladder with parser-backed target-depth
 
 - /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/lib/pipeline.ts — Independent T1 clearing scheduling
 
+
+## 2026-08-01
+
+Added task-oriented CAM workspace navigation, Basic/Advanced visibility, and detailed setting help backed by typed metadata.
+
+### Related Files
+
+- /home/manuel/code/wesen/2026-07-31--cat-mill-roam-fable/src/lib/settings-ui.ts — CAM UI metadata
+

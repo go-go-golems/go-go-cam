@@ -8,6 +8,7 @@ import { clearCanvas, drawMask, drawRgba, drawSourceImage, drawToolpaths } from 
 import { setupGcodeViewer } from "./gcode/viewer";
 import { TEST_PATTERNS, renderTestPattern } from "./lib/patterns";
 import { settingsStorageKeyForImage } from "./lib/settings-storage";
+import { SETTING_METADATA, SETTINGS_CONTROL_IDS, WORKSPACES, type WorkspaceId } from "./lib/settings-ui";
 import {
   formatSettingsTransfer,
   parseSettingsTransfer,
@@ -45,15 +46,6 @@ const state: AppState = {
   settings: null,
   warnings: []
 };
-
-const SETTINGS_CONTROL_IDS = [
-  "finishedWidth", "autoCrop", "cropPadding", "invertMask",
-  "maxDimension", "thresholdMode", "manualThreshold", "openRadius", "closeRadius", "minArea", "simplifyTolerance",
-  "vAngle", "capThickness", "breakthrough", "stepover", "rasterDirection",
-  "pocketStrategy", "flatClearing", "flatClearingStepdown", "flatDiameter", "flatRpm", "flatFeed", "flatPlunge",
-  "cutoutEnable", "cutoutUseUniformMargin", "cutoutMargin", "cutoutMarginTop", "cutoutMarginRight", "cutoutMarginBottom", "cutoutMarginLeft", "cutoutCornerRadius", "stockThickness", "cutoutStepdown", "cutoutOvercut", "cutoutBridgeThickness", "cutoutBridgeSpan",
-  "originX", "originY", "surfaceZ", "safeZ", "approachZ", "hopZ", "hopMaxTravel", "feedXY", "feedPlunge", "spindleRpm", "emitSpindle", "mirrorX", "mirrorY"
-] as const;
 
 const SETTINGS_CONTROL_ID_SET = new Set<string>(SETTINGS_CONTROL_IDS);
 
@@ -136,6 +128,69 @@ function validateSettingsTransfer(transfer: SettingsTransfer): void {
       throw new Error(`Settings field ${id} has an unsupported option.`);
     }
   }
+}
+
+function setupSettingsWorkspace(): void {
+  const controls = document.querySelector(".controls");
+  if (!controls) return;
+  const fieldsets = Array.from(controls.querySelectorAll("fieldset"));
+  const workspaceByFieldset: WorkspaceId[] = ["artwork", "artwork", "engraving", "t1", "recipes", "machine"];
+  fieldsets.forEach((fieldset, index) => fieldset.dataset.workspace = workspaceByFieldset[index] ?? "artwork");
+
+  for (const id of SETTINGS_CONTROL_IDS) {
+    const meta = SETTING_METADATA[id];
+    const control = settingControl(id);
+    const setting = control.closest(".row, .check-row");
+    if (setting && meta.advanced) setting.classList.add("advanced-setting");
+    const label = controls.querySelector<HTMLLabelElement>(`label[for="${id}"]`);
+    if (!label) continue;
+    const help = document.createElement("details");
+    help.className = "setting-help";
+    const summary = document.createElement("summary");
+    summary.setAttribute("aria-label", `Explain ${label.textContent?.trim() ?? id}`);
+    summary.textContent = "?";
+    const body = document.createElement("div");
+    body.className = "setting-help-body";
+    body.innerHTML = `<strong>What it is</strong><p>${meta.purpose}</p><strong>What it changes</strong><p>${meta.affects}</p>${meta.caution ? `<strong>Check first</strong><p>${meta.caution}</p>` : ""}`;
+    help.append(summary, body);
+    label.append(" ", help);
+  }
+
+  const nav = document.createElement("nav");
+  nav.className = "workspace-nav";
+  nav.setAttribute("aria-label", "CAM settings workspace");
+  const buttons = new Map<WorkspaceId, HTMLButtonElement>();
+  for (const workspace of WORKSPACES) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.workspace = workspace.id;
+    button.innerHTML = `<strong>${workspace.label}</strong><span>${workspace.description}</span>`;
+    nav.append(button);
+    buttons.set(workspace.id, button);
+  }
+  const advanced = document.createElement("button");
+  advanced.type = "button";
+  advanced.className = "advanced-toggle";
+  advanced.textContent = "Show advanced";
+  nav.append(advanced);
+  controls.insertBefore(nav, fieldsets[0] ?? null);
+
+  const activate = (workspace: WorkspaceId) => {
+    fieldsets.forEach((fieldset) => fieldset.hidden = fieldset.dataset.workspace !== workspace);
+    buttons.forEach((button, id) => button.classList.toggle("active", id === workspace));
+    localStorage.setItem("abs-bicolor-v-engraver/active-workspace", workspace);
+  };
+  buttons.forEach((button, id) => button.addEventListener("click", () => activate(id)));
+  advanced.addEventListener("click", () => {
+    const shown = controls.classList.toggle("show-advanced");
+    advanced.textContent = shown ? "Hide advanced" : "Show advanced";
+    localStorage.setItem("abs-bicolor-v-engraver/show-advanced", String(shown));
+  });
+  const showAdvanced = localStorage.getItem("abs-bicolor-v-engraver/show-advanced") === "true";
+  controls.classList.toggle("show-advanced", showAdvanced);
+  advanced.textContent = showAdvanced ? "Hide advanced" : "Show advanced";
+  const remembered = localStorage.getItem("abs-bicolor-v-engraver/active-workspace") as WorkspaceId | null;
+  activate(WORKSPACES.some((workspace) => workspace.id === remembered) ? remembered! : "artwork");
 }
 
 function updateMarginControlState(): void {
@@ -523,5 +578,6 @@ $("viewGeneratedGcode").addEventListener("click", () => {
   if (state.gcode) viewer.loadGcode(state.gcode, `${sanitizeBaseName(state.imageName)}_abs_vcarve.nc (generated)`);
 });
 
+setupSettingsWorkspace();
 updateMarginControlState();
 loadSample().catch((error) => setStatus(error.message, "error"));

@@ -27,6 +27,10 @@ RelatedFiles:
       Note: |-
         Step 9 pipeline integration (commit 24263b0)
         Step 16 T1 clearing pass ladder
+    - Path: repo://src/lib/settings-ui.test.ts
+      Note: Step 17 metadata coverage tests
+    - Path: repo://src/lib/settings-ui.ts
+      Note: Step 17 metadata/help/workspace registry
     - Path: repo://src/main.ts
       Note: Step 12 transfer, validation, and image restore wiring (commit f74bfca)
     - Path: repo://testdata/MakeraBadge.nc
@@ -45,6 +49,8 @@ RelatedFiles:
       Note: Step 12 rendered UI verification
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-square-frame-generated.png
       Note: Step 10 generated-job browser screenshot
+    - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/images/ui-workspaces-help.png
+      Note: Step 17 browser visual evidence
     - Path: repo://ttmp/2026/08/01/MILL-06--square-frame-cutout-with-holding-bridges/scripts/01-analyze-makera-contour-bridges.py
       Note: Ticket-local script and recorded initial modal-coordinate fix
 ExternalSources: []
@@ -53,6 +59,7 @@ LastUpdated: 2026-08-01T20:09:00-04:00
 WhatFor: Preserve the research trail and implementation review guidance for MILL-06.
 WhenToUse: Read before continuing ticket research or implementing the proposed cutout.
 ---
+
 
 
 
@@ -1027,3 +1034,57 @@ Use concise imperative language in the goal. If the task is blank or only whites
 ### Technical details
 - New DOM id/settings field: `flatClearingStepdown` (0.05–10mm, default 0.10mm).
 - Expected example: target=0.22mm / step=0.10mm gives T1 passes at -0.10, -0.20, and -0.22mm.
+
+## Step 17: Add task-oriented workspace navigation and detailed setting help
+
+I replaced the practical effect of the monolithic sidebar without destabilizing the existing DOM/form contract: the existing fieldsets are now shown one workspace at a time through an accessible navigation rail (Artwork, T2 engraving, T1 & frame, Recipes, Machine). Advanced controls are hidden by default and can be explicitly shown; this UI preference is stored separately from machining settings. Every persisted setting now has typed metadata supplying a detailed, keyboard-accessible explanation of what it is and what it changes.
+
+### Prompt Context
+
+**User prompt (verbatim):** See Step 16; this is the active implementation goal’s workspace navigation and detailed-help requirement.
+
+**Assistant interpretation:** Make all existing parameters discoverable by task, preserve their behavior/ids, and provide precise contextual help rather than a generic tooltip.
+
+**Inferred user intent:** An operator should be able to focus on one CAM decision at a time and understand the consequence before changing a value.
+
+**Commit (code):** Pending this focused commit.
+
+### What I did
+- Added `src/lib/settings-ui.ts` as the single typed control inventory, workspace assignment, Basic/Advanced designation, preset scopes, and detailed purpose/effect text.
+- Replaced the duplicate main-file id list with that typed inventory, so transfer persistence and UI help cannot silently diverge.
+- Added runtime workspace tabs that filter the existing fieldsets without renaming or replacing control ids.
+- Added one keyboard-focusable native disclosure per label with “What it is”, “What it changes”, and when applicable “Check first” content.
+- Added persistent Show/Hide advanced controls separate from generated job settings.
+- Added metadata coverage tests requiring every persisted control to have text and a valid workspace.
+- Built/browser-smoked five workspace labels, 49 help controls, fieldset filtering, and default advanced hiding; captured `images/ui-workspaces-help.png`.
+- Ran `pnpm test && pnpm build`: 6 test files / 32 tests passed; typecheck and production build passed.
+
+### Why
+- The flat Settings object remains a stable G-code boundary, but it should not force the operator into a single long-form mental model.
+
+### What worked
+- The screenshot review found the navigation, selected state, and detailed help visible and legible without clipping or overlap.
+- Existing controls continue to work because workspace filtering changes only visibility, not ownership, ids, or serialization.
+
+### What didn't work
+- The browser probe’s all-advanced-hidden boolean was not meaningful for fieldsets hidden by workspace selection; direct visual/default behavior remains the evidence. The behavior is otherwise correct.
+
+### What I learned
+- A typed metadata registry is a useful integration boundary: it connects help, advanced grouping, workspace placement, and later scoped-preset selection without nesting the pipeline Settings object.
+
+### What was tricky to build
+- The existing document contains grouped fieldsets rather than component boundaries. Filtering fieldsets at runtime provides a safe first transformation while avoiding a large, fragile HTML rewrite before preset/explainer work lands.
+
+### What warrants a second pair of eyes
+- Test the help disclosure at narrow/mobile widths and with keyboard Escape expectations before finalizing interaction polish; the native disclosure is keyboard-focusable, but Escape-to-close is not supplied.
+
+### What should be done in the future
+- Add the planned inline explainers and scoped-recipe panel into the same workspace rail, then conduct the full end-to-end browser acceptance run.
+
+### Code review instructions
+- Start with `src/lib/settings-ui.ts`, then inspect `setupSettingsWorkspace` in `src/main.ts` and the related CSS.
+- Run `pnpm test && pnpm build`; open the LAN page and switch workspaces, open a `?` disclosure, and show/hide Advanced.
+
+### Technical details
+- 49 persisted controls are covered by `SETTING_METADATA`; all are assigned to one of five workspaces.
+- Workspace and advanced visibility preferences use `abs-bicolor-v-engraver/active-workspace` and `/show-advanced`, deliberately outside the image-specific settings payload.
