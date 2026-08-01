@@ -1,13 +1,16 @@
 import { foregroundBounds } from "./imaging";
 import { pixelToMachine } from "./toolpath";
-import type { Bounds, DepthPoint, Model, Toolpath } from "./types";
+import type { Bounds, DepthPoint, Model, Point, Toolpath } from "./types";
 
-export interface SquareFrameCutoutPlan {
+export interface FrameCutoutPlan {
   /** Tight artwork bounds in source-pixel coordinates. */
   artworkBounds: Bounds;
   /** Tool-center bounds in machine coordinates. */
   frameBounds: Bounds;
-  sideLength: number;
+  frameWidth: number;
+  frameHeight: number;
+  /** Tool-center corner radius in mm. */
+  cornerRadius: number;
   /** Positive distance below surface at each bridge midpoint. */
   retainedCutDepth: number;
   /** One closed frame route for every entry in the cut-through depth ladder. */
@@ -15,6 +18,7 @@ export interface SquareFrameCutoutPlan {
 }
 
 const EPSILON = 1e-9;
+const CORNER_SEGMENTS = 6;
 
 function machineBoundsForArtwork(model: Model, artworkBounds: Bounds): Bounds {
   // Bounds name occupied pixel cells, so include their far edges. This keeps
@@ -35,21 +39,35 @@ function machineBoundsForArtwork(model: Model, artworkBounds: Bounds): Bounds {
   };
 }
 
-function makeConstantFrame(frame: Bounds, depth: number): Toolpath {
-  const points = [
-    { x: frame.minX, y: frame.minY },
-    { x: frame.maxX, y: frame.minY },
-    { x: frame.maxX, y: frame.maxY },
-    { x: frame.minX, y: frame.maxY },
-    { x: frame.minX, y: frame.minY }
-  ];
-  return { kind: "contour", points, depth, closed: true };
+function point(x: number, y: number, depth: number, pointwiseDepth: boolean): DepthPoint {
+  return pointwiseDepth ? { x, y, depth } : { x, y };
+}
+
+function appendQuarterArc(
+  points: DepthPoint[],
+  center: Point,
+  radius: number,
+  startAngle: number,
+  endAngle: number,
+  end: Point,
+  depth: number,
+  pointwiseDepth: boolean
+): void {
+  if (radius <= EPSILON) return;
+  for (let step = 1; step <= CORNER_SEGMENTS; step++) {
+    if (step === CORNER_SEGMENTS) {
+      points.push(point(end.x, end.y, depth, pointwiseDepth));
+      continue;
+    }
+    const angle = startAngle + (endAngle - startAngle) * step / CORNER_SEGMENTS;
+    points.push(point(center.x + radius * Math.cos(angle), center.y + radius * Math.sin(angle), depth, pointwiseDepth));
+  }
 }
 
 function addBridgedSide(
   points: DepthPoint[],
-  start: DepthPoint,
-  end: DepthPoint,
+  start: Point,
+  end: Point,
   nominalDepth: number,
   retainedCutDepth: number,
   bridgeSpan: number,
@@ -69,59 +87,90 @@ function addBridgedSide(
   );
 }
 
-function makeBridgedFrame(
+function appendFramePath(
   frame: Bounds,
+  cornerRadius: number,
   nominalDepth: number,
-  retainedCutDepth: number,
-  bridgeSpan: number,
-  sideLength: number
+  bridge: { retainedCutDepth: number; span: number } | null
 ): Toolpath {
-  const corners: DepthPoint[] = [
-    { x: frame.minX, y: frame.minY, depth: nominalDepth },
-    { x: frame.maxX, y: frame.minY, depth: nominalDepth },
-    { x: frame.maxX, y: frame.maxY, depth: nominalDepth },
-    { x: frame.minX, y: frame.maxY, depth: nominalDepth },
-    { x: frame.minX, y: frame.minY, depth: nominalDepth }
-  ];
-  const points: DepthPoint[] = [{ ...corners[0] }];
-  for (let side = 0; side < 4; side++) {
-    addBridgedSide(points, corners[side], corners[side + 1], nominalDepth, retainedCutDepth, bridgeSpan, sideLength);
+  const bottomLeft: Point = { x: frame.minX + cornerRadius, y: frame.minY };
+  const bottomRight: Point = { x: frame.maxX - cornerRadius, y: frame.minY };
+  const rightBottom: Point = { x: frame.maxX, y: frame.minY + cornerRadius };
+  const rightTop: Point = { x: frame.maxX, y: frame.maxY - cornerRadius };
+  const topRight: Point = { x: frame.maxX - cornerRadius, y: frame.maxY };
+  const topLeft: Point = { x: frame.minX + cornerRadius, y: frame.maxY };
+  const leftTop: Point = { x: frame.minX, y: frame.maxY - cornerRadius };
+  const leftBottom: Point = { x: frame.minX, y: frame.minY + cornerRadius };
+  const horizontalLength = frame.maxX - frame.minX - 2 * cornerRadius;
+  const verticalLength = frame.maxY - frame.minY - 2 * cornerRadius;
+  const pointwiseDepth = bridge !== null;
+  const points: DepthPoint[] = [point(bottomLeft.x, bottomLeft.y, nominalDepth, pointwiseDepth)];
+  const appendSide = (start: Point, end: Point, length: number) => {
+    if (bridge) addBridgedSide(points, start, end, nominalDepth, bridge.retainedCutDepth, bridge.span, length);
+    else points.push(point(end.x, end.y, nominalDepth, false));
+  };
+
+  appendSide(bottomLeft, bottomRight, horizontalLength);
+  appendQuarterArc(points, { x: frame.maxX - cornerRadius, y: frame.minY + cornerRadius }, cornerRadius, -Math.PI / 2, 0, rightBottom, nominalDepth, pointwiseDepth);
+  appendSide(rightBottom, rightTop, verticalLength);
+  appendQuarterArc(points, { x: frame.maxX - cornerRadius, y: frame.maxY - cornerRadius }, cornerRadius, 0, Math.PI / 2, topRight, nominalDepth, pointwiseDepth);
+  appendSide(topRight, topLeft, horizontalLength);
+  appendQuarterArc(points, { x: frame.minX + cornerRadius, y: frame.maxY - cornerRadius }, cornerRadius, Math.PI / 2, Math.PI, leftTop, nominalDepth, pointwiseDepth);
+  appendSide(leftTop, leftBottom, verticalLength);
+  appendQuarterArc(points, { x: frame.minX + cornerRadius, y: frame.minY + cornerRadius }, cornerRadius, Math.PI, Math.PI * 1.5, bottomLeft, nominalDepth, pointwiseDepth);
+
+  return pointwiseDepth
+    ? { kind: "contour", points, closed: true }
+    : { kind: "contour", points, depth: nominalDepth, closed: true };
+}
+
+function frameMargins(model: Model): { top: number; right: number; bottom: number; left: number } {
+  const radius = model.settings.flatDiameter / 2;
+  if (model.settings.cutoutUseUniformMargin) {
+    const margin = model.settings.cutoutMargin + radius;
+    return { top: margin, right: margin, bottom: margin, left: margin };
   }
-  return { kind: "contour", points, closed: true };
+  return {
+    top: model.settings.cutoutMarginTop + radius,
+    right: model.settings.cutoutMarginRight + radius,
+    bottom: model.settings.cutoutMarginBottom + radius,
+    left: model.settings.cutoutMarginLeft + radius
+  };
 }
 
 /**
- * Plan a single square, tool-center cutout around the cleaned artwork. The
- * bridge routes deliberately mirror the MakeraBadge pattern: every pass at
- * or above retained depth is complete, while deeper passes rise and descend
- * at the midpoint of every side with a span proportional to extra depth.
+ * Plan a rounded tool-center frame around cleaned artwork. Uniform margin mode
+ * produces equal finished clearance on each side; individual mode applies the
+ * four machine-space margins independently. Deeper passes use Makera-style
+ * ramped holding bridges at the midpoint of every straight side.
  */
-export function planSquareFrameCutout(model: Model, passDepths: number[]): SquareFrameCutoutPlan {
-  if (!passDepths.length) throw new Error("Square frame cutout requires at least one depth pass.");
+export function planFrameCutout(model: Model, passDepths: number[]): FrameCutoutPlan {
+  if (!passDepths.length) throw new Error("Frame cutout requires at least one depth pass.");
   if (passDepths.some((depth) => !Number.isFinite(depth) || depth >= 0)) {
-    throw new Error("Square frame cutout depth passes must be finite negative Z values.");
+    throw new Error("Frame cutout depth passes must be finite negative Z values.");
   }
 
   const artworkBounds = foregroundBounds(model.mask, model.width, model.height);
-  if (!artworkBounds) throw new Error("Square frame cutout requires non-empty artwork.");
+  if (!artworkBounds) throw new Error("Frame cutout requires non-empty artwork.");
 
   const artworkMachineBounds = machineBoundsForArtwork(model, artworkBounds);
-  const artworkWidth = artworkMachineBounds.maxX - artworkMachineBounds.minX;
-  const artworkHeight = artworkMachineBounds.maxY - artworkMachineBounds.minY;
-  const centerX = (artworkMachineBounds.minX + artworkMachineBounds.maxX) / 2;
-  const centerY = (artworkMachineBounds.minY + artworkMachineBounds.maxY) / 2;
-  const clearance = model.settings.cutoutMargin + model.settings.flatDiameter / 2;
-  const sideLength = Math.max(artworkWidth, artworkHeight) + 2 * clearance;
-  if (!(sideLength > 0) || !Number.isFinite(sideLength)) {
-    throw new Error("Square frame cutout has an invalid side length.");
-  }
-  const halfSide = sideLength / 2;
+  const margins = frameMargins(model);
   const frameBounds = {
-    minX: centerX - halfSide,
-    minY: centerY - halfSide,
-    maxX: centerX + halfSide,
-    maxY: centerY + halfSide
+    minX: artworkMachineBounds.minX - margins.left,
+    minY: artworkMachineBounds.minY - margins.bottom,
+    maxX: artworkMachineBounds.maxX + margins.right,
+    maxY: artworkMachineBounds.maxY + margins.top
   };
+  const frameWidth = frameBounds.maxX - frameBounds.minX;
+  const frameHeight = frameBounds.maxY - frameBounds.minY;
+  const cornerRadius = model.settings.cutoutCornerRadius;
+  if (!(frameWidth > 0 && frameHeight > 0 && Number.isFinite(frameWidth) && Number.isFinite(frameHeight))) {
+    throw new Error("Frame cutout has invalid dimensions.");
+  }
+  if (!(cornerRadius >= 0 && Number.isFinite(cornerRadius))) throw new Error("Frame corner radius must be a finite non-negative length.");
+  if (cornerRadius > Math.min(frameWidth, frameHeight) / 2 - EPSILON) {
+    throw new Error("Frame corner radius is too large for the selected margins.");
+  }
 
   const retainedCutDepth = model.settings.stockThickness - model.settings.cutoutBridgeThickness;
   const finalDepth = -passDepths[passDepths.length - 1];
@@ -134,18 +183,21 @@ export function planSquareFrameCutout(model: Model, passDepths: number[]): Squar
   if (!(model.settings.cutoutBridgeSpan > 0 && Number.isFinite(model.settings.cutoutBridgeSpan))) {
     throw new Error("Bridge span must be a positive finite length.");
   }
+  const shortestStraightSide = Math.min(frameWidth, frameHeight) - 2 * cornerRadius;
   const cornerClearance = model.settings.flatDiameter;
-  if (model.settings.cutoutBridgeSpan >= sideLength - 2 * cornerClearance) {
-    throw new Error("Bridge span is too wide for the square frame after corner clearance.");
+  if (model.settings.cutoutBridgeSpan >= shortestStraightSide - 2 * cornerClearance) {
+    throw new Error("Bridge span is too wide for the frame after corner clearance.");
   }
 
   const pathsByPass = passDepths.map((passZ) => {
     const nominalDepth = -passZ;
-    if (nominalDepth <= retainedCutDepth + EPSILON) return [makeConstantFrame(frameBounds, nominalDepth)];
-    const bridgeSpan = model.settings.cutoutBridgeSpan *
+    if (nominalDepth <= retainedCutDepth + EPSILON) {
+      return [appendFramePath(frameBounds, cornerRadius, nominalDepth, null)];
+    }
+    const span = model.settings.cutoutBridgeSpan *
       (nominalDepth - retainedCutDepth) / (finalDepth - retainedCutDepth);
-    return [makeBridgedFrame(frameBounds, nominalDepth, retainedCutDepth, bridgeSpan, sideLength)];
+    return [appendFramePath(frameBounds, cornerRadius, nominalDepth, { retainedCutDepth, span })];
   });
 
-  return { artworkBounds, frameBounds, sideLength, retainedCutDepth, pathsByPass };
+  return { artworkBounds, frameBounds, frameWidth, frameHeight, cornerRadius, retainedCutDepth, pathsByPass };
 }

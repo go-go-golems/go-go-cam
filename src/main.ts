@@ -51,7 +51,7 @@ const SETTINGS_CONTROL_IDS = [
   "maxDimension", "thresholdMode", "manualThreshold", "openRadius", "closeRadius", "minArea", "simplifyTolerance",
   "vAngle", "capThickness", "breakthrough", "stepover", "rasterDirection",
   "pocketStrategy", "flatClearing", "flatDiameter", "flatRpm", "flatFeed", "flatPlunge",
-  "cutoutEnable", "cutoutMargin", "stockThickness", "cutoutStepdown", "cutoutOvercut", "cutoutBridgeThickness", "cutoutBridgeSpan",
+  "cutoutEnable", "cutoutUseUniformMargin", "cutoutMargin", "cutoutMarginTop", "cutoutMarginRight", "cutoutMarginBottom", "cutoutMarginLeft", "cutoutCornerRadius", "stockThickness", "cutoutStepdown", "cutoutOvercut", "cutoutBridgeThickness", "cutoutBridgeSpan",
   "originX", "originY", "surfaceZ", "safeZ", "approachZ", "hopZ", "hopMaxTravel", "feedXY", "feedPlunge", "spindleRpm", "emitSpindle", "mirrorX", "mirrorY"
 ] as const;
 
@@ -138,6 +138,14 @@ function validateSettingsTransfer(transfer: SettingsTransfer): void {
   }
 }
 
+function updateMarginControlState(): void {
+  const uniform = checked("cutoutUseUniformMargin");
+  $<HTMLInputElement>("cutoutMargin").disabled = !uniform;
+  for (const id of ["cutoutMarginTop", "cutoutMarginRight", "cutoutMarginBottom", "cutoutMarginLeft"]) {
+    $<HTMLInputElement>(id).disabled = uniform;
+  }
+}
+
 function applySettingsTransfer(transfer: SettingsTransfer): void {
   validateSettingsTransfer(transfer);
   for (const id of SETTINGS_CONTROL_IDS) {
@@ -150,6 +158,7 @@ function applySettingsTransfer(transfer: SettingsTransfer): void {
     }
   }
   $<HTMLInputElement>("manualThreshold").disabled = $<HTMLSelectElement>("thresholdMode").value !== "manual";
+  updateMarginControlState();
   updateDerivedHeight();
 }
 
@@ -330,7 +339,13 @@ function readSettings(): Settings {
     flatFeed: clamp(numberValue("flatFeed", 800), 1, 1e5),
     flatPlunge: clamp(numberValue("flatPlunge", 200), 1, 1e5),
     cutoutEnable: checked("cutoutEnable"),
+    cutoutUseUniformMargin: checked("cutoutUseUniformMargin"),
     cutoutMargin: clamp(numberValue("cutoutMargin", 2), 0, 100),
+    cutoutMarginTop: clamp(numberValue("cutoutMarginTop", 2), 0, 100),
+    cutoutMarginRight: clamp(numberValue("cutoutMarginRight", 2), 0, 100),
+    cutoutMarginBottom: clamp(numberValue("cutoutMarginBottom", 2), 0, 100),
+    cutoutMarginLeft: clamp(numberValue("cutoutMarginLeft", 2), 0, 100),
+    cutoutCornerRadius: clamp(numberValue("cutoutCornerRadius", 3), 0, 100),
     stockThickness,
     cutoutStepdown: clamp(numberValue("cutoutStepdown", 0.5), 0.05, 10),
     cutoutOvercut: clamp(numberValue("cutoutOvercut", 0.2), 0, 5),
@@ -363,7 +378,7 @@ function updateWarnings(
   ];
   if (model.settings.cutoutEnable) {
     warnings.push(
-      `The final T1 operation cuts a square frame with four holding bridges (${model.settings.cutoutBridgeThickness.toFixed(2)}mm material retained). Do not remove the part until the spindle has stopped.`
+      `The final T1 operation cuts a rounded frame with four holding bridges (${model.settings.cutoutBridgeThickness.toFixed(2)}mm material retained). Do not remove the part until the spindle has stopped.`
     );
   }
   if (foregroundFraction < 0.002) warnings.push("Very little artwork was detected. Check threshold and inversion.");
@@ -493,6 +508,7 @@ for (const id of SETTINGS_CONTROL_IDS) {
     if (id === "thresholdMode") {
       $<HTMLInputElement>("manualThreshold").disabled = $<HTMLSelectElement>("thresholdMode").value !== "manual";
     }
+    if (id === "cutoutUseUniformMargin") updateMarginControlState();
     saveSettingsForCurrentImage();
   });
 }
@@ -506,4 +522,5 @@ $("viewGeneratedGcode").addEventListener("click", () => {
   if (state.gcode) viewer.loadGcode(state.gcode, `${sanitizeBaseName(state.imageName)}_abs_vcarve.nc (generated)`);
 });
 
+updateMarginControlState();
 loadSample().catch((error) => setStatus(error.message, "error"));

@@ -146,11 +146,35 @@
       </div>
       <div class="check-row">
         <input id="cutoutEnable" type="checkbox">
-        <label for="cutoutEnable">Cut out a square frame around the artwork at the end (T1)</label>
+        <label for="cutoutEnable">Cut out a rounded frame around the artwork at the end (T1)</label>
+      </div>
+      <div class="check-row">
+        <input id="cutoutUseUniformMargin" type="checkbox" checked>
+        <label for="cutoutUseUniformMargin">Use one margin on all sides</label>
       </div>
       <div class="row">
-        <label for="cutoutMargin">Cutout margin from artwork (mm)</label>
+        <label for="cutoutMargin">Uniform frame margin (mm)</label>
         <input id="cutoutMargin" type="number" min="0" max="50" step="0.1" value="2">
+      </div>
+      <div class="row">
+        <label for="cutoutMarginTop">Top frame margin (mm)</label>
+        <input id="cutoutMarginTop" type="number" min="0" max="50" step="0.1" value="2" disabled>
+      </div>
+      <div class="row">
+        <label for="cutoutMarginRight">Right frame margin (mm)</label>
+        <input id="cutoutMarginRight" type="number" min="0" max="50" step="0.1" value="2" disabled>
+      </div>
+      <div class="row">
+        <label for="cutoutMarginBottom">Bottom frame margin (mm)</label>
+        <input id="cutoutMarginBottom" type="number" min="0" max="50" step="0.1" value="2" disabled>
+      </div>
+      <div class="row">
+        <label for="cutoutMarginLeft">Left frame margin (mm)</label>
+        <input id="cutoutMarginLeft" type="number" min="0" max="50" step="0.1" value="2" disabled>
+      </div>
+      <div class="row">
+        <label for="cutoutCornerRadius">Frame corner radius (mm)</label>
+        <input id="cutoutCornerRadius" type="number" min="0" max="50" step="0.1" value="3">
       </div>
       <div class="row">
         <label for="stockThickness">Stock thickness (mm)</label>
@@ -172,7 +196,7 @@
         <label for="cutoutBridgeSpan">Holding bridge span at final pass (mm)</label>
         <input id="cutoutBridgeSpan" type="number" min="0.01" max="100" step="0.1" value="12.4">
       </div>
-      <div class="hint">The square frame keeps one ramped holding bridge at each side midpoint. Bridge material is intentionally retained until the spindle stops; remove the part manually afterward.</div>
+      <div class="hint">The rounded frame keeps one ramped holding bridge at each straight-side midpoint. Bridge material is intentionally retained until the spindle stops; remove the part manually afterward.</div>
       <div class="hint">The engraving bit is emitted as T2, the flat end mill as T1, matching MakeraStudio jobs. Tool changes are emitted with the spindle stopped.</div>
     </fieldset>
 

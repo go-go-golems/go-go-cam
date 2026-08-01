@@ -1,5 +1,5 @@
 export const SETTINGS_TRANSFER_FORMAT = "abs-bicolor-v-engraver/settings";
-export const SETTINGS_TRANSFER_VERSION = 1;
+export const SETTINGS_TRANSFER_VERSION = 2;
 
 export type SettingsTransferValue = boolean | number | string;
 export type SettingsTransferValues = Record<string, SettingsTransferValue>;

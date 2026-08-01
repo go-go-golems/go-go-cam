@@ -63,10 +63,19 @@ export interface Settings {
   flatRpm: number;
   flatFeed: number;
   flatPlunge: number;
-  /** Cut a square frame around the artwork at the end of the job (T1). */
+  /** Cut a rounded frame around the artwork at the end of the job (T1). */
   cutoutEnable: boolean;
-  /** Finished edge clearance from artwork to the square frame (mm). */
+  /** Use one finished edge margin for every frame side. */
+  cutoutUseUniformMargin: boolean;
+  /** Finished edge clearance from artwork to every side in uniform mode (mm). */
   cutoutMargin: number;
+  /** Individual finished edge clearances in machine-space directions (mm). */
+  cutoutMarginTop: number;
+  cutoutMarginRight: number;
+  cutoutMarginBottom: number;
+  cutoutMarginLeft: number;
+  /** Tool-center corner radius for the frame (mm); zero makes sharp corners. */
+  cutoutCornerRadius: number;
   stockThickness: number;
   cutoutStepdown: number;
   cutoutOvercut: number;

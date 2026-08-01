@@ -26,7 +26,7 @@ import {
 import { makeFermatPocketPaths } from "./fermat";
 import { makeContourPocketPaths } from "./pocketing";
 import { generateProgram, makePassLadder, type Operation, type ToolSpec } from "./operations";
-import { planSquareFrameCutout } from "./cutout";
+import { planFrameCutout } from "./cutout";
 import { generateSvg } from "./gcode-gen";
 import { parseGcode } from "../gcode/parser";
 
@@ -81,14 +81,17 @@ export async function runPipeline(
 
   if (settings.autoCrop) {
     const rawBounds = foregroundBounds(mask, width, height)!;
-    // The cutout contour lives outside the artwork; keep enough border pixels
-    // for margin + tool radius or the loop would clip at the canvas edge.
+    // The frame tool center lives outside the artwork; preserve enough border
+    // for the largest selected finished margin plus the flat-tool radius.
     let padding = settings.cropPadding;
     if (settings.cutoutEnable) {
+      const largestMargin = settings.cutoutUseUniformMargin
+        ? settings.cutoutMargin
+        : Math.max(settings.cutoutMarginTop, settings.cutoutMarginRight, settings.cutoutMarginBottom, settings.cutoutMarginLeft);
       const mmPerPxEstimate = settings.finishedWidth / (rawBounds.maxX - rawBounds.minX + 1);
       padding = Math.max(
         padding,
-        Math.ceil((settings.cutoutMargin + settings.flatDiameter / 2 + 0.5) / mmPerPxEstimate)
+        Math.ceil((largestMargin + settings.flatDiameter / 2 + 0.5) / mmPerPxEstimate)
       );
     }
     const bounds = {
@@ -223,16 +226,16 @@ export async function runPipeline(
   const orderedDetails = sortPathsNearest(detailPaths, settings.originX, settings.originY);
   const engravePaths = [...pocketPaths, ...orderedContours, ...orderedDetails];
 
-  // --- optional square frame cutout with four ramped holding bridges ---
+  // --- optional rounded frame cutout with four ramped holding bridges ---
   const cutoutPassDepths = makePassLadder(
     settings.stockThickness + settings.cutoutOvercut,
     settings.cutoutStepdown
   );
   let cutoutPathsByPass: Toolpath[][] = [];
   if (settings.cutoutEnable) {
-    onStatus("Planning square frame cutout and holding bridges…");
+    onStatus("Planning rounded frame cutout and holding bridges…");
     await nextFrame();
-    cutoutPathsByPass = planSquareFrameCutout(model, cutoutPassDepths).pathsByPass;
+    cutoutPathsByPass = planFrameCutout(model, cutoutPassDepths).pathsByPass;
   }
   const cutoutPaths = cutoutPathsByPass.flat();
 
@@ -240,7 +243,7 @@ export async function runPipeline(
     { name: "[T2]Engrave", tool: engraverTool, paths: engravePaths, passDepths: [-settings.targetDepth] },
     { name: "[T1]Flat Clearing", tool: flatTool, paths: flatPaths, passDepths: [-settings.targetDepth] },
     {
-      name: "[T1]Square Frame Cutout",
+      name: "[T1]Frame Cutout",
       tool: flatTool,
       paths: cutoutPaths,
       pathsByPass: cutoutPathsByPass,

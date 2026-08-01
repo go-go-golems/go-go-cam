@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planSquareFrameCutout } from "./cutout";
+import { planFrameCutout } from "./cutout";
 import type { Model, Settings } from "./types";
 
 function rectangleMask(width: number, height: number, x0: number, y0: number, x1: number, y1: number): Uint8Array {
@@ -16,7 +16,13 @@ function testModel(overrides: Partial<Settings> = {}): Model {
     originY: 0,
     mirrorX: false,
     mirrorY: false,
+    cutoutUseUniformMargin: true,
     cutoutMargin: 2,
+    cutoutMarginTop: 2,
+    cutoutMarginRight: 2,
+    cutoutMarginBottom: 2,
+    cutoutMarginLeft: 2,
+    cutoutCornerRadius: 3,
     flatDiameter: 2,
     stockThickness: 1.3,
     cutoutBridgeThickness: 0.8,
@@ -32,7 +38,7 @@ function testModel(overrides: Partial<Settings> = {}): Model {
     scaleX: 1,
     scaleY: 1,
     mmPerPx: 1,
-    mask: rectangleMask(width, height, 10, 20, 40, 30),
+    mask: rectangleMask(width, height, 10, 20, 40, 40),
     rgba: new Uint8ClampedArray(width * height * 4),
     toolpaths: []
   };
@@ -42,52 +48,76 @@ function bridgeCenters(path: { points: Array<{ depth?: number }> }): number[] {
   return path.points.map((point, index) => point.depth === 0.5 ? index : -1).filter((index) => index >= 0);
 }
 
-describe("planSquareFrameCutout", () => {
-  it("encloses non-square artwork in one square with tool-radius-adjusted clearance", () => {
-    const plan = planSquareFrameCutout(testModel(), [-0.5, -1, -1.5]);
+function distance(a: { x: number; y: number }, b: { x: number; y: number }): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
 
-    expect(plan.sideLength).toBeCloseTo(36); // 30mm artwork + 2 * (2mm margin + 1mm radius)
-    expect(plan.frameBounds).toEqual({ minX: 7, minY: 37, maxX: 43, maxY: 73 });
+describe("planFrameCutout", () => {
+  it("uses one exact margin on all sides and rounds corners by default", () => {
+    const plan = planFrameCutout(testModel(), [-0.5, -1, -1.5]);
+
+    // 30 × 20mm artwork + 2 * (2mm finished margin + 1mm tool radius).
+    expect(plan.frameWidth).toBeCloseTo(36);
+    expect(plan.frameHeight).toBeCloseTo(26);
+    expect(plan.frameBounds).toEqual({ minX: 7, minY: 37, maxX: 43, maxY: 63 });
+    expect(plan.cornerRadius).toBe(3);
     expect(plan.pathsByPass).toHaveLength(3);
     expect(plan.pathsByPass[0]).toHaveLength(1);
     expect(plan.pathsByPass[0][0].kind).toBe("contour");
     expect(plan.pathsByPass[0][0].closed).toBe(true);
     expect(plan.pathsByPass[0][0].depth).toBe(0.5);
-    expect(plan.pathsByPass[0][0].points).toHaveLength(5);
+    expect(plan.pathsByPass[0][0].points.length).toBeGreaterThan(5);
     expect(plan.pathsByPass[0][0].points.every((point) => point.depth === undefined)).toBe(true);
   });
 
   it("uses four midpoint bridges whose span scales across deeper passes", () => {
-    const plan = planSquareFrameCutout(testModel(), [-0.5, -1, -1.5]);
+    const plan = planFrameCutout(testModel(), [-0.5, -1, -1.5]);
     const middle = plan.pathsByPass[1][0];
     const final = plan.pathsByPass[2][0];
+    const middleCenters = bridgeCenters(middle);
+    const finalCenters = bridgeCenters(final);
 
-    expect(bridgeCenters(middle)).toEqual([2, 6, 10, 14]);
-    expect(bridgeCenters(final)).toEqual([2, 6, 10, 14]);
-    expect(middle.points[3].x - middle.points[1].x).toBeCloseTo(6.2);
-    expect(final.points[3].x - final.points[1].x).toBeCloseTo(12.4);
+    expect(middleCenters).toHaveLength(4);
+    expect(finalCenters).toHaveLength(4);
+    expect(distance(middle.points[middleCenters[0] - 1], middle.points[middleCenters[0] + 1])).toBeCloseTo(6.2);
+    expect(distance(final.points[finalCenters[0] - 1], final.points[finalCenters[0] + 1])).toBeCloseTo(12.4);
     expect(final.points.filter((point) => point.depth === 0.5)).toHaveLength(4);
     expect(final.points[0].depth).toBe(1.5);
     expect(final.points[final.points.length - 1].depth).toBe(1.5);
   });
 
-  it("derives the same square dimensions under mirrored machine transforms", () => {
-    const plan = planSquareFrameCutout(testModel({ originX: 5, originY: -10, mirrorX: true, mirrorY: true }), [-0.5, -1.5]);
-    const artwork = plan.artworkBounds;
+  it("applies individual machine-space margins when uniform mode is disabled", () => {
+    const plan = planFrameCutout(testModel({
+      cutoutUseUniformMargin: false,
+      cutoutMarginTop: 4,
+      cutoutMarginRight: 2,
+      cutoutMarginBottom: 3,
+      cutoutMarginLeft: 1,
+      cutoutBridgeSpan: 8
+    }), [-0.5, -1.5]);
 
-    expect(artwork).toEqual({ minX: 10, minY: 20, maxX: 39, maxY: 29 });
-    expect(plan.sideLength).toBeCloseTo(36);
-    expect(plan.frameBounds.maxX - plan.frameBounds.minX).toBeCloseTo(plan.sideLength);
-    expect(plan.frameBounds.maxY - plan.frameBounds.minY).toBeCloseTo(plan.sideLength);
-    // With both axes mirrored, the converted artwork lies within this same
-    // square and the 3mm tool-center clearance remains on its long axis.
-    expect(plan.frameBounds).toEqual({ minX: 62, minY: -3, maxX: 98, maxY: 33 });
+    // Artwork bounds are X 10..40 and Y 40..60. Flat-tool radius is 1mm.
+    expect(plan.frameBounds).toEqual({ minX: 8, minY: 36, maxX: 43, maxY: 65 });
+    expect(plan.frameWidth).toBe(35);
+    expect(plan.frameHeight).toBe(29);
   });
 
-  it("rejects unsafe bridge geometry instead of silently shrinking it", () => {
-    expect(() => planSquareFrameCutout(testModel({ cutoutBridgeSpan: 32 }), [-0.5, -1.5]))
+  it("derives the same margins under mirrored machine transforms", () => {
+    const plan = planFrameCutout(testModel({ originX: 5, originY: -10, mirrorX: true, mirrorY: true }), [-0.5, -1.5]);
+    const artwork = plan.artworkBounds;
+
+    expect(artwork).toEqual({ minX: 10, minY: 20, maxX: 39, maxY: 39 });
+    expect(plan.frameWidth).toBeCloseTo(36);
+    expect(plan.frameHeight).toBeCloseTo(26);
+    expect(plan.frameBounds).toEqual({ minX: 62, minY: 7, maxX: 98, maxY: 33 });
+  });
+
+  it("rejects unsafe bridge or corner geometry instead of silently shrinking it", () => {
+    expect(() => planFrameCutout(testModel({ cutoutBridgeSpan: 32 }), [-0.5, -1.5]))
       .toThrow("Bridge span is too wide");
-    expect(() => planSquareFrameCutout(testModel(), [-0.5]))
+    expect(() => planFrameCutout(testModel({ cutoutCornerRadius: 14 }), [-0.5, -1.5]))
+      .toThrow("corner radius is too large");
+    expect(() => planFrameCutout(testModel(), [-0.5]))
       .toThrow("Final cutout depth must be deeper");
   });
 });

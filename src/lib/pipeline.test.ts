@@ -11,7 +11,7 @@ function rectangularArtwork(width: number, height: number): Uint8Array {
 describe("runPipeline square frame cutout", () => {
   it("schedules one final square-frame operation with bridged pass routes", async () => {
     const settings = deriveSettings({
-      finishedWidth: 40,
+      finishedWidth: 100,
       maxDimension: 1000,
       thresholdMode: "manual",
       manualThreshold: 128,
@@ -47,7 +47,13 @@ describe("runPipeline square frame cutout", () => {
       flatFeed: 800,
       flatPlunge: 200,
       cutoutEnable: true,
+      cutoutUseUniformMargin: true,
       cutoutMargin: 2,
+      cutoutMarginTop: 2,
+      cutoutMarginRight: 2,
+      cutoutMarginBottom: 2,
+      cutoutMarginLeft: 2,
+      cutoutCornerRadius: 3,
       stockThickness: 1.3,
       cutoutStepdown: 0.5,
       cutoutOvercut: 0.2,
@@ -59,16 +65,16 @@ describe("runPipeline square frame cutout", () => {
     const parsed = parseGcode(result.gcode);
 
     expect(result.operations.map((operation) => operation.name)).toEqual([
-      "[T2]Engrave", "[T1]Flat Clearing", "[T1]Square Frame Cutout"
+      "[T2]Engrave", "[T1]Flat Clearing", "[T1]Frame Cutout"
     ]);
     expect(cutout.passDepths).toEqual([-0.5, -1, -1.5]);
     expect(cutout.pathsByPass).toHaveLength(3);
     expect(cutout.pathsByPass?.flat()).toHaveLength(3);
-    expect(cutout.pathsByPass?.[0][0].points).toHaveLength(5);
+    expect(cutout.pathsByPass?.[0][0].points.length).toBeGreaterThan(5);
     expect(cutout.pathsByPass?.[2][0].points.filter((point) => point.depth === 0.5)).toHaveLength(4);
     const frameToolpath = parsed.toolpaths.at(-1)!;
     const frameSegments = parsed.segments.filter((segment) => segment.toolpath === frameToolpath.index);
-    expect(frameToolpath.name).toBe("[T1]Square Frame Cutout");
+    expect(frameToolpath.name).toBe("[T1]Frame Cutout");
     expect(frameSegments.some((segment) =>
       !segment.rapid && segment.z1 !== segment.z2 &&
       (segment.x1 !== segment.x2 || segment.y1 !== segment.y2) && segment.z2 === -0.5
